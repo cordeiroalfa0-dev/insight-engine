@@ -14,6 +14,8 @@
     "electron:pack": "vite build && electron-packager . MasterGamesArcade --platform=win32 --arch=x64 --out=electron-release --overwrite --icon=src/assets/arcade-hero.png --ignore=\"^/src\" --ignore=\"^/public/intro\" --ignore=\"^/electron-release\" --ignore=\"^/python-tools\""
   },
   "dependencies": {
+    "@fontsource/press-start-2p": "^5.2.7",
+    "@fontsource/vt323": "^5.2.7",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-label": "^2.1.8",
