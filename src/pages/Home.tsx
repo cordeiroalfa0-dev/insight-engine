@@ -1,3 +1,4 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Star, FolderOpen, Settings2, AlertTriangle, CheckCircle, Maximize2, Minimize2, X } from "lucide-react";
 import Fuse from "fuse.js";
@@ -180,9 +181,15 @@ const SIDEBAR_WIDTH: Record<SidebarMode, number> = { expanded: 0, normal: 240, c
 
 interface HistoryItem { rom: string; timestamp: number; }
 
-export default function HomePage() {
-  return <Home />;
-}
+export const Route = createFileRoute("/")({
+  component: Home,
+  head: () => ({
+    meta: [
+      { title: "Master Games Arcade · MAME Launcher" },
+      { name: "description", content: "Retro arcade MAME launcher with neon CRT vibes." },
+    ],
+  }),
+});
 
 function Home() {
   const [mameExePath, setMameExePath]   = useState<string>("");
