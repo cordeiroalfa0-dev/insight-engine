@@ -104,12 +104,20 @@ function RomArtCard({ rom, isFavorite, compact = false }: { rom: string; isFavor
     let cancelled = false;
     setImgStatus("loading");
     setImgUrl(null);
-    const archiveUrl = `https://archive.org/download/mame-merged/snap/${encodeURIComponent(clean)}.png`;
-    getCachedArt(rom, archiveUrl).then((u) => {
-      if (cancelled) return;
-      if (u) { setImgUrl(u); setImgStatus("ok"); }
-      else setImgStatus("error");
-    });
+    const sources = [
+      `${BACKEND}/api/image?kind=snap&rom=${encodeURIComponent(clean)}`,
+      `https://thumbnails.libretro.com/MAME/Named_Snaps/${encodeURIComponent(clean)}.png`,
+      `https://thumbnails.libretro.com/MAME/Named_Titles/${encodeURIComponent(clean)}.png`,
+      `https://archive.org/download/mame-merged/snap/${encodeURIComponent(clean)}.png`,
+    ];
+    (async () => {
+      for (const url of sources) {
+        const u = await getCachedArt(rom + ":" + url, url);
+        if (cancelled) return;
+        if (u) { setImgUrl(u); setImgStatus("ok"); return; }
+      }
+      if (!cancelled) setImgStatus("error");
+    })();
     return () => { cancelled = true; };
   }, [rom, clean]);
 
