@@ -104,12 +104,20 @@ function RomArtCard({ rom, isFavorite, compact = false }: { rom: string; isFavor
     let cancelled = false;
     setImgStatus("loading");
     setImgUrl(null);
-    const archiveUrl = `https://archive.org/download/mame-merged/snap/${encodeURIComponent(clean)}.png`;
-    getCachedArt(rom, archiveUrl).then((u) => {
-      if (cancelled) return;
-      if (u) { setImgUrl(u); setImgStatus("ok"); }
-      else setImgStatus("error");
-    });
+    const sources = [
+      `http://localhost:7777/api/image?kind=snap&rom=${encodeURIComponent(clean)}`,
+      `https://thumbnails.libretro.com/MAME/Named_Snaps/${encodeURIComponent(clean)}.png`,
+      `https://thumbnails.libretro.com/MAME/Named_Titles/${encodeURIComponent(clean)}.png`,
+      `https://archive.org/download/mame-merged/snap/${encodeURIComponent(clean)}.png`,
+    ];
+    (async () => {
+      for (const url of sources) {
+        const u = await getCachedArt(rom + ":" + url, url);
+        if (cancelled) return;
+        if (u) { setImgUrl(u); setImgStatus("ok"); return; }
+      }
+      if (!cancelled) setImgStatus("error");
+    })();
     return () => { cancelled = true; };
   }, [rom, clean]);
 
@@ -659,6 +667,28 @@ function Home() {
                   className="font-display text-[7px] border border-neon-green/40 text-neon-green px-3 py-1.5 rounded bg-neon-green/5 hover:bg-neon-green/15 transition"
                 >⌨ CONFIGURAR TECLADO PADRÃO (TODAS AS ROMs)</button>
                 <span className="font-body text-[10px] text-foreground/45">Setas + Ctrl/Alt/Espaço/Shift · 1=Start · 5=Coin</span>
+              </div>
+
+              <div className="flex flex-wrap gap-2 items-center">
+                <button
+                  onClick={async () => {
+                    if (!configRomsPath) { setConfigMsg("✗ Configure a pasta de ROMs primeiro"); return; }
+                    if (!romsList.length) { setConfigMsg("✗ Escaneie as ROMs antes"); return; }
+                    setConfigMsg(`⏳ Baixando artes de ${romsList.length} ROMs... (pode demorar)`);
+                    try {
+                      const r = await fetch(`${BACKEND}/api/download-images`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ romsPath: configRomsPath, roms: romsList, kinds: ["snap", "title"] }),
+                      });
+                      const data = await r.json();
+                      if (data.ok) setConfigMsg(`✓ ${data.downloaded} imagens baixadas · ${data.skipped} já existiam · ${data.failed} falharam → ${data.dir}`);
+                      else setConfigMsg(`✗ ${data.error}`);
+                    } catch { setConfigMsg("✗ Backend offline"); }
+                  }}
+                  className="font-display text-[7px] border border-neon-yellow/40 text-neon-yellow px-3 py-1.5 rounded bg-neon-yellow/5 hover:bg-neon-yellow/15 transition"
+                >⬇ BAIXAR IMAGENS DAS ROMs (AUTO)</button>
+                <span className="font-body text-[10px] text-foreground/45">Snap + Title de libretro-thumbnails / archive.org · salva em <code className="text-neon-cyan">..\images\</code></span>
               </div>
             </div>
 
