@@ -8,6 +8,7 @@ import { spawn, execFile } from "child_process";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import https from "https";
 
 const PORT = 7777;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -43,6 +44,45 @@ function parseBody(req) {
       catch { reject(new Error("JSON inválido")); }
     });
   });
+}
+
+// Baixa um arquivo via HTTPS seguindo redirects (até 5)
+function downloadFile(url, destPath, redirects = 5) {
+  return new Promise((resolve) => {
+    const req = https.get(url, { headers: { "User-Agent": "MasterGamesArcade/1.0" } }, (resp) => {
+      if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location && redirects > 0) {
+        resp.resume();
+        const next = new URL(resp.headers.location, url).toString();
+        resolve(downloadFile(next, destPath, redirects - 1));
+        return;
+      }
+      if (resp.statusCode !== 200) { resp.resume(); resolve(false); return; }
+      try { fs.mkdirSync(path.dirname(destPath), { recursive: true }); } catch {}
+      const file = fs.createWriteStream(destPath);
+      resp.pipe(file);
+      file.on("finish", () => file.close(() => resolve(true)));
+      file.on("error", () => { try { fs.unlinkSync(destPath); } catch {} resolve(false); });
+    });
+    req.on("error", () => resolve(false));
+    req.setTimeout(15000, () => { req.destroy(); resolve(false); });
+  });
+}
+
+// Fontes públicas para artes do MAME (snap/title/marquee)
+function artSources(rom, kind) {
+  const r = encodeURIComponent(rom);
+  if (kind === "snap") return [
+    `https://thumbnails.libretro.com/MAME/Named_Snaps/${r}.png`,
+    `https://archive.org/download/mame-merged/snap/${r}.png`,
+  ];
+  if (kind === "title") return [
+    `https://thumbnails.libretro.com/MAME/Named_Titles/${r}.png`,
+    `https://archive.org/download/mame-titles/${r}.png`,
+  ];
+  if (kind === "boxart") return [
+    `https://thumbnails.libretro.com/MAME/Named_Boxarts/${r}.png`,
+  ];
+  return [];
 }
 
 function readMameIni(mameDir) {
