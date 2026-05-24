@@ -105,7 +105,7 @@ function RomArtCard({ rom, isFavorite, compact = false }: { rom: string; isFavor
     setImgStatus("loading");
     setImgUrl(null);
     const sources = [
-      `${BACKEND}/api/image?kind=snap&rom=${encodeURIComponent(clean)}`,
+      `http://localhost:7777/api/image?kind=snap&rom=${encodeURIComponent(clean)}`,
       `https://thumbnails.libretro.com/MAME/Named_Snaps/${encodeURIComponent(clean)}.png`,
       `https://thumbnails.libretro.com/MAME/Named_Titles/${encodeURIComponent(clean)}.png`,
       `https://archive.org/download/mame-merged/snap/${encodeURIComponent(clean)}.png`,
