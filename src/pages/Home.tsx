@@ -668,6 +668,28 @@ function Home() {
                 >⌨ CONFIGURAR TECLADO PADRÃO (TODAS AS ROMs)</button>
                 <span className="font-body text-[10px] text-foreground/45">Setas + Ctrl/Alt/Espaço/Shift · 1=Start · 5=Coin</span>
               </div>
+
+              <div className="flex flex-wrap gap-2 items-center">
+                <button
+                  onClick={async () => {
+                    if (!configRomsPath) { setConfigMsg("✗ Configure a pasta de ROMs primeiro"); return; }
+                    if (!romsList.length) { setConfigMsg("✗ Escaneie as ROMs antes"); return; }
+                    setConfigMsg(`⏳ Baixando artes de ${romsList.length} ROMs... (pode demorar)`);
+                    try {
+                      const r = await fetch(`${BACKEND}/api/download-images`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ romsPath: configRomsPath, roms: romsList, kinds: ["snap", "title"] }),
+                      });
+                      const data = await r.json();
+                      if (data.ok) setConfigMsg(`✓ ${data.downloaded} imagens baixadas · ${data.skipped} já existiam · ${data.failed} falharam → ${data.dir}`);
+                      else setConfigMsg(`✗ ${data.error}`);
+                    } catch { setConfigMsg("✗ Backend offline"); }
+                  }}
+                  className="font-display text-[7px] border border-neon-yellow/40 text-neon-yellow px-3 py-1.5 rounded bg-neon-yellow/5 hover:bg-neon-yellow/15 transition"
+                >⬇ BAIXAR IMAGENS DAS ROMs (AUTO)</button>
+                <span className="font-body text-[10px] text-foreground/45">Snap + Title de libretro-thumbnails / archive.org · salva em <code className="text-neon-cyan">..\images\</code></span>
+              </div>
             </div>
 
             <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-1.5">
