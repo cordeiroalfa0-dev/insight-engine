@@ -234,6 +234,59 @@ async function handleRequest(req, res) {
     return;
   }
 
+  // POST /api/download-images { romsPath, roms?: string[], kinds?: ('snap'|'title'|'boxart')[] }
+  // Baixa as artes para <romsPath>/../images/<kind>/<rom>.png
+  if (req.method === "POST" && url.pathname === "/api/download-images") {
+    let body;
+    try { body = await parseBody(req); } catch { json(res, 400, { error: "JSON inválido" }); return; }
+    const romsPath = (body.romsPath || "").trim();
+    if (!romsPath) { json(res, 400, { error: "romsPath obrigatório" }); return; }
+    const romsDir = path.resolve(romsPath);
+    if (!fs.existsSync(romsDir)) { json(res, 404, { error: `Pasta não encontrada: ${romsDir}` }); return; }
+    let roms = Array.isArray(body.roms) && body.roms.length
+      ? body.roms
+      : fs.readdirSync(romsDir).filter((f) => /\.(zip|7z|chd)$/i.test(f));
+    roms = roms.map((r) => r.replace(/\.(zip|7z|chd)$/i, ""));
+    const kinds = Array.isArray(body.kinds) && body.kinds.length ? body.kinds : ["snap", "title"];
+    const baseDir = path.join(path.dirname(romsDir), "images");
+    console.log(`[IMG] Baixando artes para ${roms.length} ROMs em ${baseDir}`);
+    let ok = 0, skipped = 0, failed = 0;
+    const concurrency = 6;
+    let idx = 0;
+    async function worker() {
+      while (idx < roms.length) {
+        const rom = roms[idx++];
+        for (const kind of kinds) {
+          const dest = path.join(baseDir, kind, `${rom}.png`);
+          if (fs.existsSync(dest) && fs.statSync(dest).size > 1000) { skipped++; continue; }
+          let success = false;
+          for (const url of artSources(rom, kind)) {
+            success = await downloadFile(url, dest);
+            if (success) break;
+          }
+          if (success) ok++; else failed++;
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: concurrency }, worker));
+    console.log(`[IMG] Concluído: ${ok} baixadas, ${skipped} já existiam, ${failed} falharam`);
+    json(res, 200, { ok: true, downloaded: ok, skipped, failed, dir: baseDir, total: roms.length * kinds.length });
+    return;
+  }
+
+  // GET /api/image?rom=...&kind=snap  → serve a imagem local se existir
+  if (req.method === "GET" && url.pathname === "/api/image") {
+    const rom = (url.searchParams.get("rom") || "").replace(/\.(zip|7z|chd)$/i, "");
+    const kind = url.searchParams.get("kind") || "snap";
+    const romsDir = (readConfig().romsDir || "").trim();
+    if (!rom || !romsDir) { res.writeHead(404); res.end(); return; }
+    const file = path.join(path.dirname(path.resolve(romsDir)), "images", kind, `${rom}.png`);
+    if (!fs.existsSync(file)) { res.writeHead(404, { "Access-Control-Allow-Origin": "*" }); res.end(); return; }
+    res.writeHead(200, { "Content-Type": "image/png", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400" });
+    fs.createReadStream(file).pipe(res);
+    return;
+  }
+
   // POST /api/set-rompath
   if (req.method === "POST" && url.pathname === "/api/set-rompath") {
     let body;
