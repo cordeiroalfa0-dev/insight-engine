@@ -590,7 +590,7 @@ function Home() {
             </div>
             <div className="font-display text-white text-[28px] md:text-[36px] tracking-widest uppercase leading-tight break-all max-w-[80vw]"
               style={{ textShadow: "0 0 20px #fff, 0 0 40px #00e5ff, 0 0 60px #00e5ff" }}>
-              {launchingRom.replace(/\.(zip|7z|chd)$/i, "")}
+              {displayName(launchingRom)}
             </div>
             <div className="flex gap-2 mt-4">
               {[0,1,2,3,4,5,6,7].map(i => (
@@ -809,19 +809,22 @@ function Home() {
                         const isFav = favorites.includes(rom);
                         const isSelected = selectedIndex === idx;
                         const clean = rom.replace(/\.(zip|7z|chd)$/i, "");
+                        const title = displayName(rom);
                         return (
                           <button key={rom}
                             onClick={() => { setSelectedIndex(idx); handleLaunchGame(rom); }}
                             onMouseEnter={() => setSelectedIndex(idx)}
                             disabled={isLaunching}
+                            title={title}
                             className={`flex flex-col rounded overflow-hidden border transition disabled:opacity-50 ${isSelected ? "border-neon-cyan/60 shadow-[0_0_12px_rgba(0,229,255,0.3)]" : "border-white/[0.07] hover:border-neon-cyan/30"}`}>
                             <div className="h-24 relative bg-black/50 flex-shrink-0">
-                              <RomArtCard rom={rom} isFavorite={isFav} />
+                              <RomArtCard rom={rom} isFavorite={isFav} title={title} />
                             </div>
                             <div className={`px-2 py-1.5 text-left ${isSelected ? "bg-neon-cyan/10" : "bg-black/40"}`}>
                               <div className="font-display text-[6px] truncate leading-tight"
                                 style={{ color: isSelected ? "#00e5ff" : "rgba(255,255,255,0.5)" }}>
-                                {isFav && "★ "}{clean.toUpperCase()}
+                                {isFav && "★ "}{title.toUpperCase()}
+                                <span className="opacity-30"> · {clean}</span>
                               </div>
                             </div>
                           </button>
@@ -882,7 +885,7 @@ function Home() {
           {sidebarMode === "normal" && (
             <>
               <div className="h-28 border-b border-white/[0.06] overflow-hidden bg-black/50 flex-shrink-0 relative">
-                {selectedRom ? <RomArtCard rom={selectedRom} isFavorite={!!isFavorite} /> : (
+                {selectedRom ? <RomArtCard rom={selectedRom} isFavorite={!!isFavorite} title={displayName(selectedRom)} /> : (
                   <div className="w-full h-full flex items-center justify-center">
                     <div className="text-center">
                       <div className="font-display text-[7px] text-foreground/20 mb-1">SEM IMAGEM</div>
@@ -896,7 +899,10 @@ function Home() {
                 <div className="font-display text-[7px] text-neon-magenta mb-1">// INFORMAÇÕES DO JOGO</div>
                 {selectedRom ? (
                   <div className="flex items-start justify-between gap-1 mb-0.5">
-                    <div className="font-display text-[9px] text-neon-cyan break-all line-clamp-2 flex-1 leading-tight">{selectedRom}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-display text-[10px] text-neon-cyan break-words line-clamp-2 leading-tight">{displayName(selectedRom)}</div>
+                      <div className="font-display text-[7px] text-foreground/35 truncate">{selectedRom}</div>
+                    </div>
                     <button onClick={() => toggleFavorite(selectedRom)} className="flex-shrink-0 transition">
                       <Star size={13} className={isFavorite ? "fill-neon-yellow text-neon-yellow" : "text-foreground/25"} />
                     </button>
@@ -942,8 +948,9 @@ function Home() {
                   const isSelected = selectedIndex === idx;
                   return (
                     <button key={rom} onClick={() => { setSelectedIndex(idx); handleLaunchGame(rom); }} disabled={isLaunching} onMouseEnter={() => setSelectedIndex(idx)}
+                      title={rom}
                       className={`w-full text-left px-3 py-1.5 font-display text-[8px] transition whitespace-nowrap overflow-hidden text-ellipsis disabled:opacity-50 ${isSelected ? "bg-neon-cyan/10 border-l-2 border-neon-cyan text-neon-cyan" : "text-foreground/45 hover:text-neon-cyan hover:bg-neon-cyan/5"}`}>
-                      {isFav && "★ "}▶ {rom}
+                      {isFav && "★ "}▶ {displayName(rom)}
                     </button>
                   );
                 })
@@ -964,9 +971,9 @@ function Home() {
                       <button key={rom} onClick={() => { setSelectedIndex(idx); handleLaunchGame(rom); }}
                         onMouseEnter={() => setSelectedIndex(idx)}
                         disabled={isLaunching}
-                        title={rom}
+                        title={`${displayName(rom)} (${rom})`}
                         className={`h-12 relative rounded overflow-hidden border transition disabled:opacity-50 ${isSelected ? "border-neon-cyan/60 shadow-[0_0_8px_rgba(0,229,255,0.4)]" : "border-white/[0.07] hover:border-neon-cyan/30"}`}>
-                        <RomArtCard rom={rom} isFavorite={isFav} compact />
+                        <RomArtCard rom={rom} isFavorite={isFav} compact title={displayName(rom)} />
                       </button>
                     );
                   })}
