@@ -14,6 +14,7 @@ const PORT = 7777;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_FILE = path.join(__dirname, "config.json");
 const LOG_FILE = path.join(__dirname, "launches.log");
+const NAMES_FILE = path.join(__dirname, "names.json");
 
 function readConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")); } catch { return {}; }
@@ -82,7 +83,74 @@ function artSources(rom, kind) {
   if (kind === "boxart") return [
     `https://thumbnails.libretro.com/MAME/Named_Boxarts/${r}.png`,
   ];
+  if (kind === "icon") return [
+    `https://thumbnails.libretro.com/MAME/Named_Boxarts/${r}.png`,
+  ];
   return [];
+}
+
+// Procura uma arte nas pastas locais do MAME (snap/snaps/titles/icons) e
+// no diretório "images" gerado pelo download em massa.
+function findLocalArt(mameDir, romsDir, rom, kind) {
+  const candidates = [];
+  const kindFolders = {
+    snap:  ["snap", "snaps", "snapshots"],
+    title: ["titles", "title"],
+    icon:  ["icons", "ico"],
+    boxart:["boxart", "boxarts", "cabinets"],
+  }[kind] || [];
+  const exts = kind === "icon" ? [".png", ".ico"] : [".png", ".jpg", ".jpeg"];
+  const roots = [];
+  if (mameDir) roots.push(mameDir);
+  if (romsDir) roots.push(path.dirname(path.resolve(romsDir)));
+  for (const root of roots) {
+    for (const f of kindFolders) {
+      for (const e of exts) candidates.push(path.join(root, f, `${rom}${e}`));
+      for (const e of exts) candidates.push(path.join(root, "images", f, `${rom}${e}`));
+    }
+    // Algumas distros guardam dentro de .zip — não suportado aqui.
+  }
+  // Pasta padrão "<romsDir>/../images/<kind>/" usada por /api/download-images
+  if (romsDir) {
+    const base = path.join(path.dirname(path.resolve(romsDir)), "images", kind);
+    for (const e of exts) candidates.push(path.join(base, `${rom}${e}`));
+  }
+  for (const c of candidates) {
+    try { if (fs.existsSync(c) && fs.statSync(c).size > 200) return c; } catch {}
+  }
+  return null;
+}
+
+function mimeFor(file) {
+  const ext = path.extname(file).toLowerCase();
+  if (ext === ".png") return "image/png";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".ico") return "image/x-icon";
+  return "application/octet-stream";
+}
+
+// Roda `mame -listfull` e devolve { rom: "Full Title" }
+function loadNamesCache() {
+  try { return JSON.parse(fs.readFileSync(NAMES_FILE, "utf8")); } catch { return {}; }
+}
+function saveNamesCache(data) {
+  try { fs.writeFileSync(NAMES_FILE, JSON.stringify(data), "utf8"); } catch {}
+}
+function runListfull(mameExe) {
+  return new Promise((resolve) => {
+    const cwd = path.dirname(mameExe);
+    execFile(mameExe, ["-listfull"], { cwd, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+      if (err || !stdout) { resolve({}); return; }
+      const names = {};
+      // Formato: "<rom>            "Full Title"
+      const re = /^(\S+)\s+"([^"]+)"/;
+      for (const line of stdout.split(/\r?\n/)) {
+        const m = re.exec(line);
+        if (m) names[m[1]] = m[2];
+      }
+      resolve(names);
+    });
+  });
 }
 
 function readMameIni(mameDir) {
