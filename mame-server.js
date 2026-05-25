@@ -346,12 +346,42 @@ async function handleRequest(req, res) {
   if (req.method === "GET" && url.pathname === "/api/image") {
     const rom = (url.searchParams.get("rom") || "").replace(/\.(zip|7z|chd)$/i, "");
     const kind = url.searchParams.get("kind") || "snap";
-    const romsDir = (readConfig().romsDir || "").trim();
-    if (!rom || !romsDir) { res.writeHead(404); res.end(); return; }
-    const file = path.join(path.dirname(path.resolve(romsDir)), "images", kind, `${rom}.png`);
-    if (!fs.existsSync(file)) { res.writeHead(404, { "Access-Control-Allow-Origin": "*" }); res.end(); return; }
-    res.writeHead(200, { "Content-Type": "image/png", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400" });
+    const auto = url.searchParams.get("auto") === "1";
+    const cfg = readConfig();
+    const romsDir = (cfg.romsDir || "").trim();
+    const mameDir = cfg.mamePath ? path.dirname(path.resolve(cfg.mamePath)) : "";
+    if (!rom) { res.writeHead(404); res.end(); return; }
+    let file = findLocalArt(mameDir, romsDir, rom, kind);
+    // Se não achou e auto=1, tenta baixar agora para a pasta padrão
+    if (!file && auto && romsDir) {
+      const dest = path.join(path.dirname(path.resolve(romsDir)), "images", kind, `${rom}.png`);
+      for (const src of artSources(rom, kind)) {
+        const ok = await downloadFile(src, dest);
+        if (ok) { file = dest; break; }
+      }
+    }
+    if (!file) { res.writeHead(404, { "Access-Control-Allow-Origin": "*" }); res.end(); return; }
+    res.writeHead(200, { "Content-Type": mimeFor(file), "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400" });
     fs.createReadStream(file).pipe(res);
+    return;
+  }
+
+  // GET /api/names?mamePath=... → { names: { rom: "Full Title", ... } }
+  // Roda mame -listfull (cacheia em names.json). Se ?refresh=1, força rerun.
+  if (req.method === "GET" && url.pathname === "/api/names") {
+    const mamePath = (url.searchParams.get("mamePath") || readConfig().mamePath || "").trim();
+    const refresh = url.searchParams.get("refresh") === "1";
+    let cache = loadNamesCache();
+    if (!refresh && Object.keys(cache).length > 100) { json(res, 200, { names: cache, cached: true, total: Object.keys(cache).length }); return; }
+    if (!mamePath) { json(res, 200, { names: cache, cached: true, total: Object.keys(cache).length }); return; }
+    const exe = path.resolve(mamePath);
+    if (!fs.existsSync(exe)) { json(res, 404, { error: `MAME não encontrado: ${exe}`, names: cache }); return; }
+    console.log(`[NAMES] Executando ${exe} -listfull (pode demorar uns segundos)...`);
+    const names = await runListfull(exe);
+    const total = Object.keys(names).length;
+    if (total > 0) { saveNamesCache(names); cache = names; }
+    console.log(`[NAMES] ${total} nomes carregados`);
+    json(res, 200, { names: cache, cached: total === 0, total: Object.keys(cache).length });
     return;
   }
 
