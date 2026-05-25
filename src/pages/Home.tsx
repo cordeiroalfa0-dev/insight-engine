@@ -726,6 +726,27 @@ function Home() {
                 >⬇ BAIXAR IMAGENS DAS ROMs (AUTO)</button>
                 <span className="font-body text-[10px] text-foreground/45">Snap + Title de libretro-thumbnails / archive.org · salva em <code className="text-neon-cyan">..\images\</code></span>
               </div>
+
+              <div className="flex flex-wrap gap-2 items-center">
+                <button
+                  onClick={async () => {
+                    if (!mameExePath) { setConfigMsg("✗ Configure o MAME primeiro"); return; }
+                    setConfigMsg("⏳ Lendo nomes oficiais (mame -listfull)... pode demorar 10-30s");
+                    try {
+                      const r = await fetch(`${BACKEND}/api/names?mamePath=${encodeURIComponent(mameExePath)}&refresh=1`);
+                      const data = await r.json();
+                      if (data?.names) {
+                        setGameNames(data.names);
+                        setConfigMsg(`✓ ${data.total} nomes oficiais carregados do MAME`);
+                      } else setConfigMsg(`✗ ${data.error || "Falha ao ler nomes"}`);
+                    } catch { setConfigMsg("✗ Backend offline"); }
+                  }}
+                  className="font-display text-[7px] border border-neon-cyan/40 text-neon-cyan px-3 py-1.5 rounded bg-neon-cyan/5 hover:bg-neon-cyan/15 transition"
+                >🏷 ATUALIZAR NOMES DOS JOGOS (mame -listfull)</button>
+                <span className="font-body text-[10px] text-foreground/45">
+                  {Object.keys(gameNames).length > 0 ? `${Object.keys(gameNames).length} nomes em cache` : "Nenhum nome carregado ainda"}
+                </span>
+              </div>
             </div>
 
             <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-1.5">
