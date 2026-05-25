@@ -197,6 +197,7 @@ function Home() {
   const [mameExePath, setMameExePath]   = useState<string>("");
   const [romsPath, setRomsPath]         = useState<string>("");
   const [romsList, setRomsList]         = useState<string[]>([]);
+  const [gameNames, setGameNames]       = useState<Record<string, string>>({});
   const [favorites, setFavorites]       = useState<string[]>([]);
   const [history, setHistory]           = useState<HistoryItem[]>([]);
   const [searchQuery, setSearchQuery]   = useState<string>("");
@@ -256,19 +257,38 @@ function Home() {
   // ── Fuse.js: busca fuzzy ──
   const fuse = useRef<Fuse<string>>(new Fuse<string>([], { threshold: 0.4, distance: 100 }));
   useEffect(() => {
-    fuse.current = new Fuse<string>(romsList, { threshold: 0.4, distance: 100 });
-  }, [romsList]);
+    // Busca tanto pelo nome do arquivo quanto pelo título completo
+    type RomEntry = { rom: string; title: string };
+    const entries: RomEntry[] = romsList.map((r) => ({
+      rom: r,
+      title: gameNames[r.replace(/\.(zip|7z|chd)$/i, "")] || r,
+    }));
+    const f = new Fuse<RomEntry>(entries, { keys: ["rom", "title"], threshold: 0.4, distance: 100 });
+    // Adapter para manter API antiga (.search → {item: string})
+    fuse.current = {
+      search: (q: string) => f.search(q).map((r) => ({ item: r.item.rom })),
+    } as unknown as Fuse<string>;
+  }, [romsList, gameNames]);
+
+  // Nome amigável: usa -listfull do MAME quando disponível
+  const displayName = useCallback((rom: string) => {
+    const clean = rom.replace(/\.(zip|7z|chd)$/i, "");
+    return gameNames[clean] || clean;
+  }, [gameNames]);
 
   const getFilteredRoms = useCallback(() => {
     const q = debouncedQuery.trim();
     let filtered: string[];
     if (!q) filtered = romsList;
-    else if (q.length <= 2) filtered = romsList.filter((r) => r.toLowerCase().includes(q.toLowerCase()));
+    else if (q.length <= 2) {
+      const lq = q.toLowerCase();
+      filtered = romsList.filter((r) => r.toLowerCase().includes(lq) || displayName(r).toLowerCase().includes(lq));
+    }
     else filtered = fuse.current.search(q).map((r) => r.item);
     const favs = filtered.filter((r) => favorites.includes(r));
     const rest = filtered.filter((r) => !favorites.includes(r));
     return [...favs, ...rest];
-  }, [romsList, debouncedQuery, favorites]);
+  }, [romsList, debouncedQuery, favorites, displayName]);
 
   const checkBackend = useCallback(async () => {
     try {
@@ -300,6 +320,18 @@ function Home() {
         setConfigMsg(`✗ ${data.error}`);
       }
     } catch { setConfigMsg("✗ Erro ao conectar no backend"); }
+  }, []);
+
+  // Carrega/atualiza a base de nomes oficiais (mame -listfull)
+  const loadNames = useCallback(async (mamePath?: string, refresh = false) => {
+    try {
+      const qs = new URLSearchParams();
+      if (mamePath) qs.set("mamePath", mamePath);
+      if (refresh) qs.set("refresh", "1");
+      const r = await fetch(`${BACKEND}/api/names?${qs.toString()}`);
+      const data = await r.json();
+      if (data?.names) setGameNames(data.names);
+    } catch { /* noop */ }
   }, []);
 
   const saveCfg = useCallback((mamePath: string, romsDir: string) => {
@@ -351,6 +383,7 @@ function Home() {
       saveCfg(mamePath, romsDir);
       checkMame(mamePath);
       scanRoms(romsDir);
+      loadNames(mamePath);
     });
     inputRef.current?.focus();
     const healthInterval = setInterval(() => { checkBackend(); }, 5000);
