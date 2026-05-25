@@ -14,6 +14,7 @@ const PORT = 7777;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_FILE = path.join(__dirname, "config.json");
 const LOG_FILE = path.join(__dirname, "launches.log");
+const NAMES_FILE = path.join(__dirname, "names.json");
 
 function readConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")); } catch { return {}; }
@@ -82,7 +83,74 @@ function artSources(rom, kind) {
   if (kind === "boxart") return [
     `https://thumbnails.libretro.com/MAME/Named_Boxarts/${r}.png`,
   ];
+  if (kind === "icon") return [
+    `https://thumbnails.libretro.com/MAME/Named_Boxarts/${r}.png`,
+  ];
   return [];
+}
+
+// Procura uma arte nas pastas locais do MAME (snap/snaps/titles/icons) e
+// no diretório "images" gerado pelo download em massa.
+function findLocalArt(mameDir, romsDir, rom, kind) {
+  const candidates = [];
+  const kindFolders = {
+    snap:  ["snap", "snaps", "snapshots"],
+    title: ["titles", "title"],
+    icon:  ["icons", "ico"],
+    boxart:["boxart", "boxarts", "cabinets"],
+  }[kind] || [];
+  const exts = kind === "icon" ? [".png", ".ico"] : [".png", ".jpg", ".jpeg"];
+  const roots = [];
+  if (mameDir) roots.push(mameDir);
+  if (romsDir) roots.push(path.dirname(path.resolve(romsDir)));
+  for (const root of roots) {
+    for (const f of kindFolders) {
+      for (const e of exts) candidates.push(path.join(root, f, `${rom}${e}`));
+      for (const e of exts) candidates.push(path.join(root, "images", f, `${rom}${e}`));
+    }
+    // Algumas distros guardam dentro de .zip — não suportado aqui.
+  }
+  // Pasta padrão "<romsDir>/../images/<kind>/" usada por /api/download-images
+  if (romsDir) {
+    const base = path.join(path.dirname(path.resolve(romsDir)), "images", kind);
+    for (const e of exts) candidates.push(path.join(base, `${rom}${e}`));
+  }
+  for (const c of candidates) {
+    try { if (fs.existsSync(c) && fs.statSync(c).size > 200) return c; } catch {}
+  }
+  return null;
+}
+
+function mimeFor(file) {
+  const ext = path.extname(file).toLowerCase();
+  if (ext === ".png") return "image/png";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".ico") return "image/x-icon";
+  return "application/octet-stream";
+}
+
+// Roda `mame -listfull` e devolve { rom: "Full Title" }
+function loadNamesCache() {
+  try { return JSON.parse(fs.readFileSync(NAMES_FILE, "utf8")); } catch { return {}; }
+}
+function saveNamesCache(data) {
+  try { fs.writeFileSync(NAMES_FILE, JSON.stringify(data), "utf8"); } catch {}
+}
+function runListfull(mameExe) {
+  return new Promise((resolve) => {
+    const cwd = path.dirname(mameExe);
+    execFile(mameExe, ["-listfull"], { cwd, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+      if (err || !stdout) { resolve({}); return; }
+      const names = {};
+      // Formato: "<rom>            "Full Title"
+      const re = /^(\S+)\s+"([^"]+)"/;
+      for (const line of stdout.split(/\r?\n/)) {
+        const m = re.exec(line);
+        if (m) names[m[1]] = m[2];
+      }
+      resolve(names);
+    });
+  });
 }
 
 function readMameIni(mameDir) {
@@ -278,12 +346,42 @@ async function handleRequest(req, res) {
   if (req.method === "GET" && url.pathname === "/api/image") {
     const rom = (url.searchParams.get("rom") || "").replace(/\.(zip|7z|chd)$/i, "");
     const kind = url.searchParams.get("kind") || "snap";
-    const romsDir = (readConfig().romsDir || "").trim();
-    if (!rom || !romsDir) { res.writeHead(404); res.end(); return; }
-    const file = path.join(path.dirname(path.resolve(romsDir)), "images", kind, `${rom}.png`);
-    if (!fs.existsSync(file)) { res.writeHead(404, { "Access-Control-Allow-Origin": "*" }); res.end(); return; }
-    res.writeHead(200, { "Content-Type": "image/png", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400" });
+    const auto = url.searchParams.get("auto") === "1";
+    const cfg = readConfig();
+    const romsDir = (cfg.romsDir || "").trim();
+    const mameDir = cfg.mamePath ? path.dirname(path.resolve(cfg.mamePath)) : "";
+    if (!rom) { res.writeHead(404); res.end(); return; }
+    let file = findLocalArt(mameDir, romsDir, rom, kind);
+    // Se não achou e auto=1, tenta baixar agora para a pasta padrão
+    if (!file && auto && romsDir) {
+      const dest = path.join(path.dirname(path.resolve(romsDir)), "images", kind, `${rom}.png`);
+      for (const src of artSources(rom, kind)) {
+        const ok = await downloadFile(src, dest);
+        if (ok) { file = dest; break; }
+      }
+    }
+    if (!file) { res.writeHead(404, { "Access-Control-Allow-Origin": "*" }); res.end(); return; }
+    res.writeHead(200, { "Content-Type": mimeFor(file), "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400" });
     fs.createReadStream(file).pipe(res);
+    return;
+  }
+
+  // GET /api/names?mamePath=... → { names: { rom: "Full Title", ... } }
+  // Roda mame -listfull (cacheia em names.json). Se ?refresh=1, força rerun.
+  if (req.method === "GET" && url.pathname === "/api/names") {
+    const mamePath = (url.searchParams.get("mamePath") || readConfig().mamePath || "").trim();
+    const refresh = url.searchParams.get("refresh") === "1";
+    let cache = loadNamesCache();
+    if (!refresh && Object.keys(cache).length > 100) { json(res, 200, { names: cache, cached: true, total: Object.keys(cache).length }); return; }
+    if (!mamePath) { json(res, 200, { names: cache, cached: true, total: Object.keys(cache).length }); return; }
+    const exe = path.resolve(mamePath);
+    if (!fs.existsSync(exe)) { json(res, 404, { error: `MAME não encontrado: ${exe}`, names: cache }); return; }
+    console.log(`[NAMES] Executando ${exe} -listfull (pode demorar uns segundos)...`);
+    const names = await runListfull(exe);
+    const total = Object.keys(names).length;
+    if (total > 0) { saveNamesCache(names); cache = names; }
+    console.log(`[NAMES] ${total} nomes carregados`);
+    json(res, 200, { names: cache, cached: total === 0, total: Object.keys(cache).length });
     return;
   }
 
