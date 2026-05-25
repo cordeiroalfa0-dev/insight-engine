@@ -93,9 +93,10 @@ async function getCachedArt(rom: string, url: string): Promise<string | null> {
 }
 
 // ─── RomArtCard com cache local + fallback CSS ────────────────────────────────
-function RomArtCard({ rom, isFavorite, compact = false }: { rom: string; isFavorite: boolean; compact?: boolean }) {
+function RomArtCard({ rom, isFavorite, compact = false, title }: { rom: string; isFavorite: boolean; compact?: boolean; title?: string }) {
   const clean = rom.replace(/\.(zip|7z|chd)$/i, "");
-  const initials = clean.slice(0, 3).toUpperCase();
+  const label = (title || clean).toUpperCase();
+  const initials = label.replace(/[^A-Z0-9]/g, "").slice(0, 3) || clean.slice(0, 3).toUpperCase();
   const palette = PALETTES[clean.charCodeAt(0) % PALETTES.length];
   const [imgStatus, setImgStatus] = useState<"loading" | "ok" | "error">("loading");
   const [imgUrl, setImgUrl] = useState<string | null>(null);
@@ -105,7 +106,9 @@ function RomArtCard({ rom, isFavorite, compact = false }: { rom: string; isFavor
     setImgStatus("loading");
     setImgUrl(null);
     const sources = [
-      `http://localhost:7777/api/image?kind=snap&rom=${encodeURIComponent(clean)}`,
+      // Pede ao backend (snap local do MAME → cache → download automático)
+      `http://localhost:7777/api/image?kind=snap&auto=1&rom=${encodeURIComponent(clean)}`,
+      `http://localhost:7777/api/image?kind=title&auto=1&rom=${encodeURIComponent(clean)}`,
       `https://thumbnails.libretro.com/MAME/Named_Snaps/${encodeURIComponent(clean)}.png`,
       `https://thumbnails.libretro.com/MAME/Named_Titles/${encodeURIComponent(clean)}.png`,
       `https://archive.org/download/mame-merged/snap/${encodeURIComponent(clean)}.png`,
@@ -158,7 +161,7 @@ function RomArtCard({ rom, isFavorite, compact = false }: { rom: string; isFavor
           {!compact && (
             <div className="relative z-10 font-display text-[5px] tracking-wider max-w-[90%] text-center truncate"
               style={{ color: palette.glow, opacity: 0.6 }}>
-              {imgStatus === "loading" ? "BUSCANDO..." : clean.toUpperCase()}
+              {imgStatus === "loading" ? "BUSCANDO..." : label}
             </div>
           )}
         </div>
