@@ -77,10 +77,20 @@
       "!**/*.map"
     ],
     "extraResources": [
-      { "from": "mame-server.js", "to": "mame-server.js" }
+      {
+        "from": "mame-server.js",
+        "to": "mame-server.js"
+      }
     ],
     "win": {
-      "target": [{ "target": "nsis-web", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis-web",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.ico",
       "artifactName": "MasterGamesArcade-Setup-${version}.${ext}"
     },
