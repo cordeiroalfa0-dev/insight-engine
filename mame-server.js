@@ -558,6 +558,8 @@ async function handleRequest(req, res) {
     if (!fs.existsSync(mameExe)) { json(res, 404, { error: `MAME não encontrado: ${mameExe}` }); return; }
     const mameDir = path.dirname(mameExe);
     const romsDir = path.resolve(romsPath.trim());
+    // Persiste config global (sobrevive a reinício)
+    writeConfig({ ...readConfig(), mamePath: mameExe, romsDir, updatedAt: Date.now() });
     const iniPath = path.join(mameDir, "mame.ini");
     if (!fs.existsSync(iniPath)) {
       console.log("[MAME] Criando mame.ini com -createconfig...");
