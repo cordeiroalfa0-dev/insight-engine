@@ -1096,6 +1096,118 @@ function Home() {
           setBrowser(null);
         }}
       />
+
+      {/* PICKER da pasta de instalação do MAME */}
+      <FolderBrowser
+        open={installBrowserOpen}
+        mode="dir"
+        title="ESCOLHER PASTA PARA INSTALAR O MAME"
+        initialPath={installDest}
+        backend={BACKEND}
+        onClose={() => setInstallBrowserOpen(false)}
+        onSelect={(p) => { setInstallDest(p); setInstallBrowserOpen(false); }}
+      />
+
+      {/* JANELA DE INSTALAÇÃO DO MAME */}
+      {installerOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 backdrop-blur-sm" onClick={() => !installProgress.active && setInstallerOpen(false)}>
+          <div
+            className="relative w-[92vw] max-w-xl rounded-lg overflow-hidden border border-neon-yellow/40"
+            style={{ boxShadow: "0 0 48px rgba(255,234,0,0.18)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabeçalho com a imagem de fundo do sistema */}
+            <div
+              className="h-32 relative"
+              style={{
+                backgroundImage: "url('/assets/background.png')",
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }}
+            >
+              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/30 to-black/95" />
+              <div className="absolute inset-0 flex flex-col items-center justify-end p-3">
+                <div className="font-display text-[10px] text-neon-yellow tracking-[0.3em]" style={{ textShadow: "0 0 12px #ffea00" }}>
+                  INSTALADOR MAME · OPEN SOURCE
+                </div>
+                <div className="font-display text-[7px] text-neon-cyan mt-1 tracking-widest">MASTER GAMES ARCADE</div>
+              </div>
+              {!installProgress.active && (
+                <button onClick={() => setInstallerOpen(false)} className="absolute top-2 right-2 text-white/80 hover:text-white bg-black/40 rounded p-1"><X size={14} /></button>
+              )}
+            </div>
+
+            <div className="bg-black/95 px-5 py-4 space-y-3">
+              <div className="font-body text-[11px] text-foreground/70 leading-snug">
+                Vamos baixar a versão mais recente do <span className="text-neon-cyan">MAME</span> direto do GitHub oficial
+                (<span className="text-neon-yellow">mamedev/mame</span>) e extrair na pasta escolhida. O sistema vai reconhecer
+                automaticamente o <code className="text-neon-cyan">mame.exe</code> e a pasta <code className="text-neon-cyan">roms/</code> — e lembrar para sempre.
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-display text-[7px] text-neon-cyan block">PASTA DE DESTINO</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={installDest}
+                    onChange={(e) => setInstallDest(e.target.value)}
+                    disabled={installProgress.active}
+                    className="flex-1 px-3 py-1.5 bg-black/40 border border-white/10 text-foreground font-body text-sm rounded focus:outline-none focus:border-neon-yellow/40 disabled:opacity-50"
+                    placeholder="C:\MAME"
+                  />
+                  <button
+                    onClick={() => setInstallBrowserOpen(true)}
+                    disabled={installProgress.active}
+                    className="font-display text-[7px] border border-neon-magenta/40 text-neon-magenta px-3 py-1.5 rounded bg-neon-magenta/5 hover:bg-neon-magenta/15 transition disabled:opacity-40"
+                  ><FolderOpen size={9} className="inline mr-1" />PROCURAR</button>
+                </div>
+              </div>
+
+              {installProgress.active || installProgress.phase === "done" || installProgress.phase === "error" ? (
+                <div className="space-y-2 pt-1">
+                  <div className="h-2 w-full bg-white/[0.06] rounded overflow-hidden">
+                    <div
+                      className="h-full transition-all"
+                      style={{
+                        width: `${installProgress.percent}%`,
+                        background: installProgress.phase === "error" ? "#ef4444" : installProgress.phase === "done" ? "#00e676" : "linear-gradient(90deg, #00e5ff, #ffea00)",
+                      }}
+                    />
+                  </div>
+                  <div className={`font-display text-[8px] ${installProgress.phase === "error" ? "text-red-400" : installProgress.phase === "done" ? "text-neon-green" : "text-neon-yellow"}`}>
+                    {installProgress.phase === "error"
+                      ? `✗ ${installProgress.error || "Falhou"}`
+                      : installProgress.phase === "done"
+                      ? `✓ Instalado em ${installProgress.mamePath}`
+                      : `${installProgress.percent}% · ${installProgress.message || installProgress.phase}`}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex gap-2 pt-2 border-t border-white/[0.05]">
+                <button
+                  onClick={startInstallMame}
+                  disabled={installProgress.active || backendStatus !== "ok"}
+                  className="flex-1 font-display text-[8px] border border-neon-yellow/50 text-neon-yellow px-4 py-2 rounded bg-neon-yellow/10 hover:bg-neon-yellow/20 transition disabled:opacity-40"
+                >
+                  {installProgress.active ? "⏳ INSTALANDO..." : installProgress.phase === "done" ? "✓ REINSTALAR" : "⬇ BAIXAR E INSTALAR AGORA"}
+                </button>
+                <button
+                  onClick={() => setInstallerOpen(false)}
+                  disabled={installProgress.active}
+                  className="font-display text-[8px] border border-white/15 text-white/70 px-4 py-2 rounded hover:bg-white/5 disabled:opacity-40"
+                >FECHAR</button>
+              </div>
+
+              {backendStatus !== "ok" && (
+                <div className="font-display text-[7px] text-red-400">
+                  ⚠ Backend offline. Rode <span className="text-neon-yellow">node mame-server.js</span> antes de instalar.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
