@@ -16,6 +16,31 @@ const CONFIG_FILE = path.join(__dirname, "config.json");
 const LOG_FILE = path.join(__dirname, "launches.log");
 const NAMES_FILE = path.join(__dirname, "names.json");
 
+// Estado global do progresso de instalação do MAME (consumido por /api/install-mame/status)
+const installProgress = {
+  active: false,
+  phase: "idle", // idle | fetching-release | downloading | extracting | done | error
+  message: "",
+  percent: 0,
+  totalBytes: 0,
+  downloadedBytes: 0,
+  mamePath: "",
+  romsDir: "",
+  error: "",
+};
+
+function resetInstallProgress() {
+  installProgress.active = false;
+  installProgress.phase = "idle";
+  installProgress.message = "";
+  installProgress.percent = 0;
+  installProgress.totalBytes = 0;
+  installProgress.downloadedBytes = 0;
+  installProgress.mamePath = "";
+  installProgress.romsDir = "";
+  installProgress.error = "";
+}
+
 function readConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")); } catch { return {}; }
 }
@@ -47,26 +72,164 @@ function parseBody(req) {
   });
 }
 
-// Baixa um arquivo via HTTPS seguindo redirects (até 5)
-function downloadFile(url, destPath, redirects = 5) {
+// Baixa um arquivo via HTTPS seguindo redirects (até 5). onProgress(downloaded, total).
+function downloadFile(url, destPath, redirects = 5, onProgress = null) {
   return new Promise((resolve) => {
     const req = https.get(url, { headers: { "User-Agent": "MasterGamesArcade/1.0" } }, (resp) => {
       if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location && redirects > 0) {
         resp.resume();
         const next = new URL(resp.headers.location, url).toString();
-        resolve(downloadFile(next, destPath, redirects - 1));
+        resolve(downloadFile(next, destPath, redirects - 1, onProgress));
         return;
       }
       if (resp.statusCode !== 200) { resp.resume(); resolve(false); return; }
       try { fs.mkdirSync(path.dirname(destPath), { recursive: true }); } catch {}
+      const total = parseInt(resp.headers["content-length"] || "0", 10);
+      let downloaded = 0;
+      if (onProgress) {
+        resp.on("data", (chunk) => { downloaded += chunk.length; onProgress(downloaded, total); });
+      }
       const file = fs.createWriteStream(destPath);
       resp.pipe(file);
       file.on("finish", () => file.close(() => resolve(true)));
       file.on("error", () => { try { fs.unlinkSync(destPath); } catch {} resolve(false); });
     });
     req.on("error", () => resolve(false));
-    req.setTimeout(15000, () => { req.destroy(); resolve(false); });
+    req.setTimeout(120000, () => { req.destroy(); resolve(false); });
   });
+}
+
+// Busca o último release do MAME no GitHub e devolve a URL do .exe 64-bit
+function fetchLatestMameAssetUrl() {
+  return new Promise((resolve) => {
+    https.get(
+      "https://api.github.com/repos/mamedev/mame/releases/latest",
+      { headers: { "User-Agent": "MasterGamesArcade/1.0", Accept: "application/vnd.github+json" } },
+      (resp) => {
+        let body = "";
+        resp.on("data", (c) => (body += c));
+        resp.on("end", () => {
+          try {
+            const data = JSON.parse(body);
+            const assets = data.assets || [];
+            const win = assets.find((a) => /mame.*64bit\.exe$/i.test(a.name))
+                     || assets.find((a) => /mame.*windows.*\.exe$/i.test(a.name))
+                     || assets.find((a) => /\.exe$/i.test(a.name));
+            if (!win) { resolve(null); return; }
+            resolve({ url: win.browser_download_url, name: win.name, size: win.size, tag: data.tag_name });
+          } catch { resolve(null); }
+        });
+      },
+    ).on("error", () => resolve(null));
+  });
+}
+
+// Extrai self-extracting 7z do MAME (mameXXXX_64bit.exe -y -o"DEST")
+function extractMameSfx(sfxExe, destDir) {
+  return new Promise((resolve) => {
+    try { fs.mkdirSync(destDir, { recursive: true }); } catch {}
+    const child = spawn(sfxExe, ["-y", `-o${destDir}`], { cwd: destDir, windowsHide: true });
+    child.on("error", () => resolve(false));
+    child.on("exit", (code) => resolve(code === 0));
+  });
+}
+
+async function runInstallMame(destDir) {
+  try {
+    installProgress.active = true;
+    installProgress.phase = "fetching-release";
+    installProgress.message = "Procurando última versão do MAME no GitHub...";
+    installProgress.percent = 1;
+    const asset = await fetchLatestMameAssetUrl();
+    if (!asset) {
+      installProgress.phase = "error";
+      installProgress.error = "Não foi possível obter a release do MAME";
+      installProgress.active = false;
+      return;
+    }
+    fs.mkdirSync(destDir, { recursive: true });
+    const sfxPath = path.join(destDir, asset.name);
+    installProgress.phase = "downloading";
+    installProgress.message = `Baixando ${asset.name} (${asset.tag})...`;
+    installProgress.totalBytes = asset.size || 0;
+    const ok = await downloadFile(asset.url, sfxPath, 5, (d, t) => {
+      installProgress.downloadedBytes = d;
+      installProgress.totalBytes = t || asset.size || 0;
+      const tot = installProgress.totalBytes || 1;
+      installProgress.percent = Math.min(85, Math.round((d / tot) * 80) + 2);
+    });
+    if (!ok) {
+      installProgress.phase = "error";
+      installProgress.error = "Falha ao baixar o instalador do MAME";
+      installProgress.active = false;
+      return;
+    }
+    installProgress.phase = "extracting";
+    installProgress.message = "Extraindo arquivos do MAME (isso pode demorar 1-2min)...";
+    installProgress.percent = 88;
+    const extractDir = path.join(destDir, "MAME");
+    const extracted = await extractMameSfx(sfxPath, extractDir);
+    if (!extracted) {
+      installProgress.phase = "error";
+      installProgress.error = "Falha ao extrair o MAME (.exe SFX)";
+      installProgress.active = false;
+      return;
+    }
+    // Localiza mame.exe (na raiz ou subpasta)
+    let mameExe = "";
+    const tryPaths = [path.join(extractDir, "mame.exe"), path.join(extractDir, "mame64.exe")];
+    for (const p of tryPaths) if (fs.existsSync(p)) { mameExe = p; break; }
+    if (!mameExe) {
+      // procura recursivamente até 2 níveis
+      const walk = (dir, depth) => {
+        if (depth < 0) return null;
+        try {
+          for (const f of fs.readdirSync(dir)) {
+            const full = path.join(dir, f);
+            const st = fs.statSync(full);
+            if (st.isFile() && /^mame(64)?\.exe$/i.test(f)) return full;
+            if (st.isDirectory()) {
+              const r = walk(full, depth - 1);
+              if (r) return r;
+            }
+          }
+        } catch {}
+        return null;
+      };
+      mameExe = walk(extractDir, 2) || "";
+    }
+    if (!mameExe) {
+      installProgress.phase = "error";
+      installProgress.error = "mame.exe não foi encontrado após extração";
+      installProgress.active = false;
+      return;
+    }
+    const mameDir = path.dirname(mameExe);
+    const romsDir = path.join(mameDir, "roms");
+    try { fs.mkdirSync(romsDir, { recursive: true }); } catch {}
+    // Persiste configuração
+    writeConfig({ ...readConfig(), mamePath: mameExe, romsDir, updatedAt: Date.now() });
+    // Escreve rompath no mame.ini
+    try {
+      const iniPath = path.join(mameDir, "mame.ini");
+      if (!fs.existsSync(iniPath)) {
+        await new Promise((resolve) => execFile(mameExe, ["-createconfig"], { cwd: mameDir }, () => resolve()));
+      }
+      writeMameIniKey(mameDir, "rompath", romsDir);
+    } catch {}
+    // Limpa o SFX baixado para economizar espaço
+    try { fs.unlinkSync(sfxPath); } catch {}
+    installProgress.mamePath = mameExe;
+    installProgress.romsDir = romsDir;
+    installProgress.percent = 100;
+    installProgress.phase = "done";
+    installProgress.message = `✓ MAME instalado em ${mameDir}`;
+    installProgress.active = false;
+  } catch (e) {
+    installProgress.phase = "error";
+    installProgress.error = String(e && e.message || e);
+    installProgress.active = false;
+  }
 }
 
 // Fontes públicas para artes do MAME (snap/title/marquee)
@@ -395,6 +558,8 @@ async function handleRequest(req, res) {
     if (!fs.existsSync(mameExe)) { json(res, 404, { error: `MAME não encontrado: ${mameExe}` }); return; }
     const mameDir = path.dirname(mameExe);
     const romsDir = path.resolve(romsPath.trim());
+    // Persiste config global (sobrevive a reinício)
+    writeConfig({ ...readConfig(), mamePath: mameExe, romsDir, updatedAt: Date.now() });
     const iniPath = path.join(mameDir, "mame.ini");
     if (!fs.existsSync(iniPath)) {
       console.log("[MAME] Criando mame.ini com -createconfig...");
@@ -482,6 +647,25 @@ ${ports}
   }
 
   // POST /api/launch  { mamePath, romName, showMame? }
+  // POST /api/install-mame { destDir } — inicia download/extração do MAME oficial
+  if (req.method === "POST" && url.pathname === "/api/install-mame") {
+    if (installProgress.active) { json(res, 409, { error: "Instalação já em andamento", progress: installProgress }); return; }
+    let body;
+    try { body = await parseBody(req); } catch { json(res, 400, { error: "JSON inválido" }); return; }
+    const destDir = (body.destDir || "").trim();
+    if (!destDir) { json(res, 400, { error: "destDir obrigatório" }); return; }
+    resetInstallProgress();
+    runInstallMame(path.resolve(destDir)); // fire and forget
+    json(res, 202, { ok: true, message: "Instalação iniciada. Poll em /api/install-mame/status" });
+    return;
+  }
+
+  // GET /api/install-mame/status — devolve o progresso atual
+  if (req.method === "GET" && url.pathname === "/api/install-mame/status") {
+    json(res, 200, installProgress);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/launch") {
     let body;
     try { body = await parseBody(req); } catch { json(res, 400, { error: "JSON inválido" }); return; }
