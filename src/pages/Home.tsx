@@ -216,6 +216,13 @@ function Home() {
   const [launchMsg, setLaunchMsg]       = useState("");
   const [sidebarMode, setSidebarModeState] = useState<SidebarMode>("normal");
   const [browser, setBrowser] = useState<null | "mame" | "roms">(null);
+  const [installerOpen, setInstallerOpen] = useState(false);
+  const [installDest, setInstallDest] = useState<string>("C:\\MAME");
+  const [installBrowserOpen, setInstallBrowserOpen] = useState(false);
+  const [installProgress, setInstallProgress] = useState<{
+    active: boolean; phase: string; message: string; percent: number;
+    error?: string; mamePath?: string; romsDir?: string;
+  }>({ active: false, phase: "idle", message: "", percent: 0 });
   const [showMameWindow, setShowMameWindow] = useState<boolean>(() => {
     try { return localStorage.getItem("mame.showWindow") === "1"; } catch { return false; }
   });
