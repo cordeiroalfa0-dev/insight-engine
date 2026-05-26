@@ -11,7 +11,10 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "electron:dev": "vite build && electron .",
-    "electron:pack": "vite build && electron-packager . MasterGamesArcade --platform=win32 --arch=x64 --out=electron-release --overwrite --icon=src/assets/arcade-hero.png --ignore=\"^/src\" --ignore=\"^/public/intro\" --ignore=\"^/electron-release\" --ignore=\"^/python-tools\""
+    "electron:pack": "vite build && electron-packager . MasterGamesArcade --platform=win32 --arch=x64 --out=electron-release --overwrite --ignore=\"^/src\" --ignore=\"^/public/intro\" --ignore=\"^/electron-release\" --ignore=\"^/python-tools\"",
+    "prebuild:installer": "node scripts/make-icon.cjs",
+    "build:installer": "npm run prebuild:installer && npm run build && electron-builder --win nsis-web --x64",
+    "build:installer-full": "npm run prebuild:installer && npm run build && electron-builder --win nsis --x64"
   },
   "dependencies": {
     "@fontsource/press-start-2p": "^5.2.7",
@@ -49,10 +52,52 @@
     "@types/react-lazy-load-image-component": "^1.6.5",
     "@vitejs/plugin-react": "^5.0.4",
     "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
     "electron-packager": "^17.1.2",
+    "png-to-ico": "^2.1.8",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.8.3",
     "vite": "^7.3.1",
     "vite-tsconfig-paths": "^6.0.2"
+  },
+  "build": {
+    "appId": "com.emerson.mastergamesarcade",
+    "productName": "Master Games Arcade",
+    "copyright": "Copyright © 2026 dev emerson",
+    "directories": {
+      "buildResources": "build",
+      "output": "electron-release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "mame-server.js",
+      "package.json",
+      "!python-tools/**/*",
+      "!**/*.map"
+    ],
+    "extraResources": [
+      { "from": "mame-server.js", "to": "mame-server.js" }
+    ],
+    "win": {
+      "target": [{ "target": "nsis-web", "arch": ["x64"] }],
+      "icon": "build/icon.ico",
+      "artifactName": "MasterGamesArcade-Setup-${version}.${ext}"
+    },
+    "nsisWeb": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Master Games Arcade",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
+      "include": "build/installer.nsh"
+    },
+    "publish": null
   }
 }
