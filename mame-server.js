@@ -647,6 +647,25 @@ ${ports}
   }
 
   // POST /api/launch  { mamePath, romName, showMame? }
+  // POST /api/install-mame { destDir } — inicia download/extração do MAME oficial
+  if (req.method === "POST" && url.pathname === "/api/install-mame") {
+    if (installProgress.active) { json(res, 409, { error: "Instalação já em andamento", progress: installProgress }); return; }
+    let body;
+    try { body = await parseBody(req); } catch { json(res, 400, { error: "JSON inválido" }); return; }
+    const destDir = (body.destDir || "").trim();
+    if (!destDir) { json(res, 400, { error: "destDir obrigatório" }); return; }
+    resetInstallProgress();
+    runInstallMame(path.resolve(destDir)); // fire and forget
+    json(res, 202, { ok: true, message: "Instalação iniciada. Poll em /api/install-mame/status" });
+    return;
+  }
+
+  // GET /api/install-mame/status — devolve o progresso atual
+  if (req.method === "GET" && url.pathname === "/api/install-mame/status") {
+    json(res, 200, installProgress);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/launch") {
     let body;
     try { body = await parseBody(req); } catch { json(res, 400, { error: "JSON inválido" }); return; }
