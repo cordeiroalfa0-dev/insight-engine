@@ -34,7 +34,17 @@ function createWindow() {
     minHeight: 640,
     backgroundColor: "#0a0014",
     title: "Master Games Arcade · dev emerson 2026",
-    icon: path.join(__dirname, "..", "dist", "favicon.png"),
+    icon: (function () {
+      const candidates = [
+        path.join(appRoot, "build", "icon.ico"),
+        path.join(appRoot, "build", "icon.png"),
+        path.join(__dirname, "..", "build", "icon.ico"),
+        path.join(__dirname, "..", "dist", "assets", "background.png"),
+        path.join(__dirname, "..", "dist", "favicon.png"),
+      ];
+      for (const c of candidates) { try { if (fs.existsSync(c)) return c; } catch {} }
+      return undefined;
+    })(),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
