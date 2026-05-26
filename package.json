@@ -54,6 +54,7 @@
     "electron": "^33.0.0",
     "electron-builder": "^25.1.8",
     "electron-packager": "^17.1.2",
+    "jimp": "^0.22.12",
     "png-to-ico": "^2.1.8",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.8.3",
