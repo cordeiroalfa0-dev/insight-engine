@@ -809,7 +809,8 @@ function Home() {
             <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-1.5">
               <div className="font-display text-[7px] text-neon-magenta">// MAME OFICIAL (OPEN SOURCE)</div>
               <div className="flex flex-wrap gap-2">
-                <a href="https://www.mamedev.org/release.html" target="_blank" rel="noopener noreferrer" className="font-display text-[7px] border border-neon-cyan/35 text-neon-cyan px-3 py-1.5 rounded bg-neon-cyan/5 hover:bg-neon-cyan/15 transition">⬇ BAIXAR MAME OFICIAL</a>
+                <button onClick={() => setInstallerOpen(true)} className="font-display text-[7px] border border-neon-yellow/50 text-neon-yellow px-3 py-1.5 rounded bg-neon-yellow/10 hover:bg-neon-yellow/20 transition">⬇ BAIXAR E INSTALAR MAME (AUTOMÁTICO)</button>
+                <a href="https://www.mamedev.org/release.html" target="_blank" rel="noopener noreferrer" className="font-display text-[7px] border border-neon-cyan/35 text-neon-cyan px-3 py-1.5 rounded bg-neon-cyan/5 hover:bg-neon-cyan/15 transition">⬇ MAME OFICIAL (site)</a>
                 <a href="https://www.mamedev.org/roms/" target="_blank" rel="noopener noreferrer" className="font-display text-[7px] border border-neon-green/35 text-neon-green px-3 py-1.5 rounded bg-neon-green/5 hover:bg-neon-green/15 transition">⬇ ROMS LEGAIS (MAMEDEV)</a>
               </div>
               <div className="font-body text-[10px] text-foreground/45 leading-snug">
