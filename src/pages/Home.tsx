@@ -541,6 +541,56 @@ function Home() {
     await scanRoms(configRomsPath.trim());
   };
 
+  // Inicia download/instalação do MAME oficial e fica fazendo polling do progresso
+  const startInstallMame = useCallback(async () => {
+    if (!installDest.trim()) return;
+    setInstallProgress({ active: true, phase: "starting", message: "Iniciando...", percent: 0 });
+    try {
+      const r = await fetch(`${BACKEND}/api/install-mame`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destDir: installDest.trim() }),
+      });
+      if (!r.ok && r.status !== 202) {
+        const d = await r.json().catch(() => ({}));
+        setInstallProgress({ active: false, phase: "error", message: "", percent: 0, error: d.error || "Falha ao iniciar instalação" });
+        return;
+      }
+    } catch {
+      setInstallProgress({ active: false, phase: "error", message: "", percent: 0, error: "Backend offline" });
+      return;
+    }
+    // polling
+    const poll = async () => {
+      try {
+        const r = await fetch(`${BACKEND}/api/install-mame/status`);
+        const p = await r.json();
+        setInstallProgress({
+          active: !!p.active,
+          phase: p.phase || "idle",
+          message: p.message || "",
+          percent: p.percent || 0,
+          error: p.error,
+          mamePath: p.mamePath,
+          romsDir: p.romsDir,
+        });
+        if (p.phase === "done") {
+          if (p.mamePath) { setMameExePath(p.mamePath); setConfigMamePath(p.mamePath); setMameStatus("found"); }
+          if (p.romsDir)  { setRomsPath(p.romsDir);   setConfigRomsPath(p.romsDir); }
+          if (p.mamePath && p.romsDir) saveCfg(p.mamePath, p.romsDir);
+          if (p.romsDir) scanRoms(p.romsDir);
+          if (p.mamePath) loadNames(p.mamePath, true);
+          return;
+        }
+        if (p.phase === "error") return;
+        setTimeout(poll, 800);
+      } catch {
+        setTimeout(poll, 1500);
+      }
+    };
+    setTimeout(poll, 600);
+  }, [installDest, saveCfg, scanRoms, loadNames]);
+
   const historyRoms     = history.slice(0, 5).map((h) => h.rom);
   const selectedRom     = filteredRoms[selectedIndex];
   const isFavorite      = selectedRom && favorites.includes(selectedRom);
