@@ -13,8 +13,8 @@
     "electron:dev": "vite build && electron .",
     "electron:pack": "vite build && electron-packager . MasterGamesArcade --platform=win32 --arch=x64 --out=electron-release --overwrite --ignore=\"^/src\" --ignore=\"^/public/intro\" --ignore=\"^/electron-release\" --ignore=\"^/python-tools\"",
     "prebuild:installer": "node scripts/make-icon.cjs",
-    "build:installer": "npm run prebuild:installer && npm run build && electron-builder --win nsis-web --x64",
-    "build:installer-full": "npm run prebuild:installer && npm run build && electron-builder --win nsis --x64"
+    "build:installer": "npm run prebuild:installer && npm run build && electron-builder --win nsis --x64",
+    "build:installer-web": "npm run prebuild:installer && npm run build && electron-builder --win nsis-web --x64"
   },
   "dependencies": {
     "@fontsource/press-start-2p": "^5.2.7",
@@ -86,7 +86,7 @@
     "win": {
       "target": [
         {
-          "target": "nsis-web",
+          "target": "nsis",
           "arch": [
             "x64"
           ]
@@ -95,7 +95,7 @@
       "icon": "build/icon.ico",
       "artifactName": "MasterGamesArcade-Setup-${version}.${ext}"
     },
-    "nsisWeb": {
+    "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,

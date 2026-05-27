@@ -448,7 +448,7 @@ function Home() {
         });
       } else { playSound(sndError); setLaunchMsg(`✗ ${data.error}`); }
     } catch { playSound(sndError); setLaunchMsg("✗ Falha ao chamar o backend."); }
-    finally { setTimeout(() => { setIsLaunching(false); setLaunchingRom(""); setTimeout(() => setLaunchMsg(""), 3000); }, 4000); }
+    finally { setTimeout(() => { setIsLaunching(false); setLaunchingRom(""); setTimeout(() => setLaunchMsg(""), 3000); }, 9000); }
   }, [mameExePath, backendStatus, romsPath, showMameWindow]);
 
   useEffect(() => {
