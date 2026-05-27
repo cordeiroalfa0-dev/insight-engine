@@ -60,10 +60,11 @@ function playSound(snd: Howl | undefined) { try { snd?.play(); } catch { /* noop
 const PALETTES = [
   { bg: "from-cyan-950 to-black",    glow: "#00e5ff" },
   { bg: "from-purple-950 to-black",  glow: "#e040fb" },
-  { bg: "from-green-950 to-black",   glow: "#69ff47" },
   { bg: "from-yellow-950 to-black",  glow: "#ffe033" },
   { bg: "from-pink-950 to-black",    glow: "#ff4fa3" },
   { bg: "from-orange-950 to-black",  glow: "#ff8c00" },
+  { bg: "from-blue-950 to-black",    glow: "#3b82f6" },
+  { bg: "from-red-950 to-black",     glow: "#ff3860" },
 ];
 
 // ─── Cache de artes via localforage (IndexedDB) ───────────────────────────────
@@ -891,8 +892,8 @@ function Home() {
                         const title = displayName(rom);
                         return (
                           <button key={rom}
-                            onClick={() => { setSelectedIndex(idx); handleLaunchGame(rom); }}
-                            onMouseEnter={() => setSelectedIndex(idx)}
+                            onClick={() => { loadSounds(); playSound(sndSelect); setSelectedIndex(idx); handleLaunchGame(rom); }}
+                            onMouseEnter={() => { loadSounds(); playSound(sndMove); setSelectedIndex(idx); }}
                             disabled={isLaunching}
                             title={title}
                             className={`flex flex-col rounded overflow-hidden border transition disabled:opacity-50 ${isSelected ? "border-neon-cyan/60 shadow-[0_0_12px_rgba(0,229,255,0.3)]" : "border-white/[0.07] hover:border-neon-cyan/30"}`}>
