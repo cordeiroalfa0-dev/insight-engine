@@ -22,13 +22,9 @@ echo [2/3] Build do frontend (vite)...
 call npm run build
 if errorlevel 1 ( echo [ERRO] Falha no build & pause & exit /b 1 )
 
-echo [3/3] Empacotando com electron-builder (NSIS-WEB)...
-call npx electron-builder --win nsis-web --x64
-if errorlevel 1 (
-    echo.
-    echo [AVISO] Falhou NSIS-WEB. Tentando NSIS classico (pacote maior, ~80MB)...
-    call npx electron-builder --win nsis --x64
-)
+echo [3/3] Empacotando com electron-builder (NSIS instalador unico, offline)...
+call npx electron-builder --win nsis --x64
+if errorlevel 1 ( echo [ERRO] Falha no electron-builder & pause & exit /b 1 )
 
 echo.
 echo ============================================
