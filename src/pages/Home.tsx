@@ -60,10 +60,11 @@ function playSound(snd: Howl | undefined) { try { snd?.play(); } catch { /* noop
 const PALETTES = [
   { bg: "from-cyan-950 to-black",    glow: "#00e5ff" },
   { bg: "from-purple-950 to-black",  glow: "#e040fb" },
-  { bg: "from-green-950 to-black",   glow: "#69ff47" },
   { bg: "from-yellow-950 to-black",  glow: "#ffe033" },
   { bg: "from-pink-950 to-black",    glow: "#ff4fa3" },
   { bg: "from-orange-950 to-black",  glow: "#ff8c00" },
+  { bg: "from-blue-950 to-black",    glow: "#3b82f6" },
+  { bg: "from-red-950 to-black",     glow: "#ff3860" },
 ];
 
 // ─── Cache de artes via localforage (IndexedDB) ───────────────────────────────
