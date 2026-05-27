@@ -892,8 +892,8 @@ function Home() {
                         const title = displayName(rom);
                         return (
                           <button key={rom}
-                            onClick={() => { setSelectedIndex(idx); handleLaunchGame(rom); }}
-                            onMouseEnter={() => setSelectedIndex(idx)}
+                            onClick={() => { loadSounds(); playSound(sndSelect); setSelectedIndex(idx); handleLaunchGame(rom); }}
+                            onMouseEnter={() => { loadSounds(); playSound(sndMove); setSelectedIndex(idx); }}
                             disabled={isLaunching}
                             title={title}
                             className={`flex flex-col rounded overflow-hidden border transition disabled:opacity-50 ${isSelected ? "border-neon-cyan/60 shadow-[0_0_12px_rgba(0,229,255,0.3)]" : "border-white/[0.07] hover:border-neon-cyan/30"}`}>
