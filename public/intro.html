@@ -405,6 +405,7 @@ function transitionToImage() {
 }
 
 function enterLauncher() {
+  if (!canEnter) return;
   canEnter = false;
   playStartSound();
   setTimeout(() => {
@@ -418,7 +419,7 @@ function enterLauncher() {
 }
 
 // Qualquer tecla entra
-document.addEventListener('keydown', () => { enterLauncher(); });
+document.addEventListener('keydown', () => { if (canEnter) enterLauncher(); });
 
 // Cursor
 document.addEventListener('mousemove', e => {

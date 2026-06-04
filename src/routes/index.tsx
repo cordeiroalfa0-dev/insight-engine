@@ -1,3 +1,4 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Star, FolderOpen, Settings2, AlertTriangle, CheckCircle, Maximize2, Minimize2, X } from "lucide-react";
 import Fuse from "fuse.js";
@@ -5,8 +6,10 @@ import { useSpring, animated as animatedRaw } from "@react-spring/web";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const animated: any = animatedRaw;
 
-import { LazyLoadImage } from "react-lazy-load-image-component";
+import LazyLoadPkg from "react-lazy-load-image-component";
 import "react-lazy-load-image-component/src/effects/opacity.css";
+// Pacote é CommonJS — usar default + destructure evita o erro de named export no SSR.
+const { LazyLoadImage } = LazyLoadPkg as unknown as { LazyLoadImage: React.ComponentType<React.ImgHTMLAttributes<HTMLImageElement> & { effect?: string; threshold?: number; wrapperClassName?: string }> };
 import { Howl } from "howler";
 import localforage from "localforage";
 import { useDebounce } from "use-debounce";
@@ -60,11 +63,10 @@ function playSound(snd: Howl | undefined) { try { snd?.play(); } catch { /* noop
 const PALETTES = [
   { bg: "from-cyan-950 to-black",    glow: "#00e5ff" },
   { bg: "from-purple-950 to-black",  glow: "#e040fb" },
+  { bg: "from-green-950 to-black",   glow: "#69ff47" },
   { bg: "from-yellow-950 to-black",  glow: "#ffe033" },
   { bg: "from-pink-950 to-black",    glow: "#ff4fa3" },
   { bg: "from-orange-950 to-black",  glow: "#ff8c00" },
-  { bg: "from-blue-950 to-black",    glow: "#3b82f6" },
-  { bg: "from-red-950 to-black",     glow: "#ff3860" },
 ];
 
 // ─── Cache de artes via localforage (IndexedDB) ───────────────────────────────
@@ -94,10 +96,9 @@ async function getCachedArt(rom: string, url: string): Promise<string | null> {
 }
 
 // ─── RomArtCard com cache local + fallback CSS ────────────────────────────────
-function RomArtCard({ rom, isFavorite, compact = false, title }: { rom: string; isFavorite: boolean; compact?: boolean; title?: string }) {
+function RomArtCard({ rom, isFavorite, compact = false }: { rom: string; isFavorite: boolean; compact?: boolean }) {
   const clean = rom.replace(/\.(zip|7z|chd)$/i, "");
-  const label = (title || clean).toUpperCase();
-  const initials = label.replace(/[^A-Z0-9]/g, "").slice(0, 3) || clean.slice(0, 3).toUpperCase();
+  const initials = clean.slice(0, 3).toUpperCase();
   const palette = PALETTES[clean.charCodeAt(0) % PALETTES.length];
   const [imgStatus, setImgStatus] = useState<"loading" | "ok" | "error">("loading");
   const [imgUrl, setImgUrl] = useState<string | null>(null);
@@ -106,22 +107,12 @@ function RomArtCard({ rom, isFavorite, compact = false, title }: { rom: string; 
     let cancelled = false;
     setImgStatus("loading");
     setImgUrl(null);
-    const sources = [
-      // Pede ao backend (snap local do MAME → cache → download automático)
-      `http://localhost:7777/api/image?kind=snap&auto=1&rom=${encodeURIComponent(clean)}`,
-      `http://localhost:7777/api/image?kind=title&auto=1&rom=${encodeURIComponent(clean)}`,
-      `https://thumbnails.libretro.com/MAME/Named_Snaps/${encodeURIComponent(clean)}.png`,
-      `https://thumbnails.libretro.com/MAME/Named_Titles/${encodeURIComponent(clean)}.png`,
-      `https://archive.org/download/mame-merged/snap/${encodeURIComponent(clean)}.png`,
-    ];
-    (async () => {
-      for (const url of sources) {
-        const u = await getCachedArt(rom + ":" + url, url);
-        if (cancelled) return;
-        if (u) { setImgUrl(u); setImgStatus("ok"); return; }
-      }
-      if (!cancelled) setImgStatus("error");
-    })();
+    const archiveUrl = `https://archive.org/download/mame-merged/snap/${encodeURIComponent(clean)}.png`;
+    getCachedArt(rom, archiveUrl).then((u) => {
+      if (cancelled) return;
+      if (u) { setImgUrl(u); setImgStatus("ok"); }
+      else setImgStatus("error");
+    });
     return () => { cancelled = true; };
   }, [rom, clean]);
 
@@ -162,7 +153,7 @@ function RomArtCard({ rom, isFavorite, compact = false, title }: { rom: string; 
           {!compact && (
             <div className="relative z-10 font-display text-[5px] tracking-wider max-w-[90%] text-center truncate"
               style={{ color: palette.glow, opacity: 0.6 }}>
-              {imgStatus === "loading" ? "BUSCANDO..." : label}
+              {imgStatus === "loading" ? "BUSCANDO..." : clean.toUpperCase()}
             </div>
           )}
         </div>
@@ -192,13 +183,20 @@ const SIDEBAR_WIDTH: Record<SidebarMode, number> = { expanded: 0, normal: 240, c
 
 interface HistoryItem { rom: string; timestamp: number; }
 
-export default function HomePage() { return <Home />; }
+export const Route = createFileRoute("/")({
+  component: Home,
+  head: () => ({
+    meta: [
+      { title: "Master Games Arcade · MAME Launcher" },
+      { name: "description", content: "Retro arcade MAME launcher with neon CRT vibes." },
+    ],
+  }),
+});
 
 function Home() {
   const [mameExePath, setMameExePath]   = useState<string>("");
   const [romsPath, setRomsPath]         = useState<string>("");
   const [romsList, setRomsList]         = useState<string[]>([]);
-  const [gameNames, setGameNames]       = useState<Record<string, string>>({});
   const [favorites, setFavorites]       = useState<string[]>([]);
   const [history, setHistory]           = useState<HistoryItem[]>([]);
   const [searchQuery, setSearchQuery]   = useState<string>("");
@@ -217,13 +215,6 @@ function Home() {
   const [launchMsg, setLaunchMsg]       = useState("");
   const [sidebarMode, setSidebarModeState] = useState<SidebarMode>("normal");
   const [browser, setBrowser] = useState<null | "mame" | "roms">(null);
-  const [installerOpen, setInstallerOpen] = useState(false);
-  const [installDest, setInstallDest] = useState<string>("C:\\MAME");
-  const [installBrowserOpen, setInstallBrowserOpen] = useState(false);
-  const [installProgress, setInstallProgress] = useState<{
-    active: boolean; phase: string; message: string; percent: number;
-    error?: string; mamePath?: string; romsDir?: string;
-  }>({ active: false, phase: "idle", message: "", percent: 0 });
   const [showMameWindow, setShowMameWindow] = useState<boolean>(() => {
     try { return localStorage.getItem("mame.showWindow") === "1"; } catch { return false; }
   });
@@ -265,38 +256,19 @@ function Home() {
   // ── Fuse.js: busca fuzzy ──
   const fuse = useRef<Fuse<string>>(new Fuse<string>([], { threshold: 0.4, distance: 100 }));
   useEffect(() => {
-    // Busca tanto pelo nome do arquivo quanto pelo título completo
-    type RomEntry = { rom: string; title: string };
-    const entries: RomEntry[] = romsList.map((r) => ({
-      rom: r,
-      title: gameNames[r.replace(/\.(zip|7z|chd)$/i, "")] || r,
-    }));
-    const f = new Fuse<RomEntry>(entries, { keys: ["rom", "title"], threshold: 0.4, distance: 100 });
-    // Adapter para manter API antiga (.search → {item: string})
-    fuse.current = {
-      search: (q: string) => f.search(q).map((r) => ({ item: r.item.rom })),
-    } as unknown as Fuse<string>;
-  }, [romsList, gameNames]);
-
-  // Nome amigável: usa -listfull do MAME quando disponível
-  const displayName = useCallback((rom: string) => {
-    const clean = rom.replace(/\.(zip|7z|chd)$/i, "");
-    return gameNames[clean] || clean;
-  }, [gameNames]);
+    fuse.current = new Fuse<string>(romsList, { threshold: 0.4, distance: 100 });
+  }, [romsList]);
 
   const getFilteredRoms = useCallback(() => {
     const q = debouncedQuery.trim();
     let filtered: string[];
     if (!q) filtered = romsList;
-    else if (q.length <= 2) {
-      const lq = q.toLowerCase();
-      filtered = romsList.filter((r) => r.toLowerCase().includes(lq) || displayName(r).toLowerCase().includes(lq));
-    }
+    else if (q.length <= 2) filtered = romsList.filter((r) => r.toLowerCase().includes(q.toLowerCase()));
     else filtered = fuse.current.search(q).map((r) => r.item);
     const favs = filtered.filter((r) => favorites.includes(r));
     const rest = filtered.filter((r) => !favorites.includes(r));
     return [...favs, ...rest];
-  }, [romsList, debouncedQuery, favorites, displayName]);
+  }, [romsList, debouncedQuery, favorites]);
 
   const checkBackend = useCallback(async () => {
     try {
@@ -328,18 +300,6 @@ function Home() {
         setConfigMsg(`✗ ${data.error}`);
       }
     } catch { setConfigMsg("✗ Erro ao conectar no backend"); }
-  }, []);
-
-  // Carrega/atualiza a base de nomes oficiais (mame -listfull)
-  const loadNames = useCallback(async (mamePath?: string, refresh = false) => {
-    try {
-      const qs = new URLSearchParams();
-      if (mamePath) qs.set("mamePath", mamePath);
-      if (refresh) qs.set("refresh", "1");
-      const r = await fetch(`${BACKEND}/api/names?${qs.toString()}`);
-      const data = await r.json();
-      if (data?.names) setGameNames(data.names);
-    } catch { /* noop */ }
   }, []);
 
   const saveCfg = useCallback((mamePath: string, romsDir: string) => {
@@ -391,7 +351,6 @@ function Home() {
       saveCfg(mamePath, romsDir);
       checkMame(mamePath);
       scanRoms(romsDir);
-      loadNames(mamePath);
     });
     inputRef.current?.focus();
     const healthInterval = setInterval(() => { checkBackend(); }, 5000);
@@ -448,7 +407,7 @@ function Home() {
         });
       } else { playSound(sndError); setLaunchMsg(`✗ ${data.error}`); }
     } catch { playSound(sndError); setLaunchMsg("✗ Falha ao chamar o backend."); }
-    finally { setTimeout(() => { setIsLaunching(false); setLaunchingRom(""); setTimeout(() => setLaunchMsg(""), 3000); }, 9000); }
+    finally { setTimeout(() => { setIsLaunching(false); setLaunchingRom(""); setTimeout(() => setLaunchMsg(""), 3000); }, 4000); }
   }, [mameExePath, backendStatus, romsPath, showMameWindow]);
 
   useEffect(() => {
@@ -542,56 +501,6 @@ function Home() {
     await scanRoms(configRomsPath.trim());
   };
 
-  // Inicia download/instalação do MAME oficial e fica fazendo polling do progresso
-  const startInstallMame = useCallback(async () => {
-    if (!installDest.trim()) return;
-    setInstallProgress({ active: true, phase: "starting", message: "Iniciando...", percent: 0 });
-    try {
-      const r = await fetch(`${BACKEND}/api/install-mame`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destDir: installDest.trim() }),
-      });
-      if (!r.ok && r.status !== 202) {
-        const d = await r.json().catch(() => ({}));
-        setInstallProgress({ active: false, phase: "error", message: "", percent: 0, error: d.error || "Falha ao iniciar instalação" });
-        return;
-      }
-    } catch {
-      setInstallProgress({ active: false, phase: "error", message: "", percent: 0, error: "Backend offline" });
-      return;
-    }
-    // polling
-    const poll = async () => {
-      try {
-        const r = await fetch(`${BACKEND}/api/install-mame/status`);
-        const p = await r.json();
-        setInstallProgress({
-          active: !!p.active,
-          phase: p.phase || "idle",
-          message: p.message || "",
-          percent: p.percent || 0,
-          error: p.error,
-          mamePath: p.mamePath,
-          romsDir: p.romsDir,
-        });
-        if (p.phase === "done") {
-          if (p.mamePath) { setMameExePath(p.mamePath); setConfigMamePath(p.mamePath); setMameStatus("found"); }
-          if (p.romsDir)  { setRomsPath(p.romsDir);   setConfigRomsPath(p.romsDir); }
-          if (p.mamePath && p.romsDir) saveCfg(p.mamePath, p.romsDir);
-          if (p.romsDir) scanRoms(p.romsDir);
-          if (p.mamePath) loadNames(p.mamePath, true);
-          return;
-        }
-        if (p.phase === "error") return;
-        setTimeout(poll, 800);
-      } catch {
-        setTimeout(poll, 1500);
-      }
-    };
-    setTimeout(poll, 600);
-  }, [installDest, saveCfg, scanRoms, loadNames]);
-
   const historyRoms     = history.slice(0, 5).map((h) => h.rom);
   const selectedRom     = filteredRoms[selectedIndex];
   const isFavorite      = selectedRom && favorites.includes(selectedRom);
@@ -648,7 +557,7 @@ function Home() {
             </div>
             <div className="font-display text-white text-[28px] md:text-[36px] tracking-widest uppercase leading-tight break-all max-w-[80vw]"
               style={{ textShadow: "0 0 20px #fff, 0 0 40px #00e5ff, 0 0 60px #00e5ff" }}>
-              {displayName(launchingRom)}
+              {launchingRom.replace(/\.(zip|7z|chd)$/i, "")}
             </div>
             <div className="flex gap-2 mt-4">
               {[0,1,2,3,4,5,6,7].map(i => (
@@ -676,7 +585,7 @@ function Home() {
             <div>
               <div className="font-display text-[10px] text-neon-cyan">MASTER GAMES ARCADE</div>
               <div className="font-body text-xs text-foreground/40 -mt-0.5">
-                Iniciador MAME
+                Iniciador MAME · <span className="text-neon-magenta/80">DEV EMERSON · 2026</span>
                 {showMameInfo && backendStatus === "ok"      && <span className="text-neon-green ml-2">● backend ok</span>}
                 {showMameInfo && backendStatus === "offline" && <span className="text-red-400 ml-2">● backend offline</span>}
               </div>
@@ -696,7 +605,7 @@ function Home() {
       {/* CONFIG PANEL */}
       {showConfig && (
         <div className={`fixed top-[46px] left-3 right-3 z-[39] rounded-b-md px-5 py-4 ${glassDark}`} style={{ boxShadow: "0 8px 40px rgba(224,64,251,0.08)" }}>
-          <div className="font-display text-[8px] text-neon-magenta mb-2">// CONFIGURAÇÃO DE CAMINHOS</div>
+          <div className="font-display text-[8px] text-neon-magenta mb-2">// MASTER GAMES ARCADE · DEV EMERSON 2026 · CONFIGURAÇÃO</div>
           {backendStatus === "offline" && (
             <div className="mb-3 px-3 py-2 bg-red-900/30 border border-red-500/30 rounded font-display text-[7px] text-red-300">
               ⚠ Backend offline! Abra um terminal na pasta do projeto e execute:<br />
@@ -759,50 +668,12 @@ function Home() {
                     } catch { setConfigMsg("✗ Backend offline"); }
                   }}
                   className="font-display text-[7px] border border-neon-green/40 text-neon-green px-3 py-1.5 rounded bg-neon-green/5 hover:bg-neon-green/15 transition"
-                >⌨ CONFIGURAR TECLADO PADRÃO (TODAS AS ROMs)</button>
-                <span className="font-body text-[10px] text-foreground/45">Setas + Ctrl/Alt/Espaço/Shift · 1=Start · 5=Coin</span>
-              </div>
-
-              <div className="flex flex-wrap gap-2 items-center">
-                <button
-                  onClick={async () => {
-                    if (!configRomsPath) { setConfigMsg("✗ Configure a pasta de ROMs primeiro"); return; }
-                    if (!romsList.length) { setConfigMsg("✗ Escaneie as ROMs antes"); return; }
-                    setConfigMsg(`⏳ Baixando artes de ${romsList.length} ROMs... (pode demorar)`);
-                    try {
-                      const r = await fetch(`${BACKEND}/api/download-images`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ romsPath: configRomsPath, roms: romsList, kinds: ["snap", "title"] }),
-                      });
-                      const data = await r.json();
-                      if (data.ok) setConfigMsg(`✓ ${data.downloaded} imagens baixadas · ${data.skipped} já existiam · ${data.failed} falharam → ${data.dir}`);
-                      else setConfigMsg(`✗ ${data.error}`);
-                    } catch { setConfigMsg("✗ Backend offline"); }
-                  }}
-                  className="font-display text-[7px] border border-neon-yellow/40 text-neon-yellow px-3 py-1.5 rounded bg-neon-yellow/5 hover:bg-neon-yellow/15 transition"
-                >⬇ BAIXAR IMAGENS DAS ROMs (AUTO)</button>
-                <span className="font-body text-[10px] text-foreground/45">Snap + Title de libretro-thumbnails / archive.org · salva em <code className="text-neon-cyan">..\images\</code></span>
-              </div>
-
-              <div className="flex flex-wrap gap-2 items-center">
-                <button
-                  onClick={async () => {
-                    if (!mameExePath) { setConfigMsg("✗ Configure o MAME primeiro"); return; }
-                    setConfigMsg("⏳ Lendo nomes oficiais (mame -listfull)... pode demorar 10-30s");
-                    try {
-                      const r = await fetch(`${BACKEND}/api/names?mamePath=${encodeURIComponent(mameExePath)}&refresh=1`);
-                      const data = await r.json();
-                      if (data?.names) {
-                        setGameNames(data.names);
-                        setConfigMsg(`✓ ${data.total} nomes oficiais carregados do MAME`);
-                      } else setConfigMsg(`✗ ${data.error || "Falha ao ler nomes"}`);
-                    } catch { setConfigMsg("✗ Backend offline"); }
-                  }}
-                  className="font-display text-[7px] border border-neon-cyan/40 text-neon-cyan px-3 py-1.5 rounded bg-neon-cyan/5 hover:bg-neon-cyan/15 transition"
-                >🏷 ATUALIZAR NOMES DOS JOGOS (mame -listfull)</button>
-                <span className="font-body text-[10px] text-foreground/45">
-                  {Object.keys(gameNames).length > 0 ? `${Object.keys(gameNames).length} nomes em cache` : "Nenhum nome carregado ainda"}
+                >⌨ CONFIGURAR TECLADO (SOCO·CHUTE·TIRO · TODAS AS ROMs)</button>
+                <span
+                  className="font-body text-[10px] text-foreground/55 leading-tight"
+                  title={"P1: Setas | A S D = Soco fraco/medio/forte (tambem Tiro/Bomba/Especial em shmups) | Z X C = Chute fraco/medio/forte | 1=Start 5=Coin | ESC=sair\nP2: Numpad 8/2/4/6 | Q W E (socos) | R T Y (chutes) | 2=Start 6=Coin"}
+                >
+                  P1: Setas · A·S·D = Soco/Tiro · Z·X·C = Chute · 1=Start 5=Coin
                 </span>
               </div>
             </div>
@@ -810,8 +681,7 @@ function Home() {
             <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-1.5">
               <div className="font-display text-[7px] text-neon-magenta">// MAME OFICIAL (OPEN SOURCE)</div>
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => setInstallerOpen(true)} className="font-display text-[7px] border border-neon-yellow/50 text-neon-yellow px-3 py-1.5 rounded bg-neon-yellow/10 hover:bg-neon-yellow/20 transition">⬇ BAIXAR E INSTALAR MAME (AUTOMÁTICO)</button>
-                <a href="https://www.mamedev.org/release.html" target="_blank" rel="noopener noreferrer" className="font-display text-[7px] border border-neon-cyan/35 text-neon-cyan px-3 py-1.5 rounded bg-neon-cyan/5 hover:bg-neon-cyan/15 transition">⬇ MAME OFICIAL (site)</a>
+                <a href="https://www.mamedev.org/release.html" target="_blank" rel="noopener noreferrer" className="font-display text-[7px] border border-neon-cyan/35 text-neon-cyan px-3 py-1.5 rounded bg-neon-cyan/5 hover:bg-neon-cyan/15 transition">⬇ BAIXAR MAME OFICIAL</a>
                 <a href="https://www.mamedev.org/roms/" target="_blank" rel="noopener noreferrer" className="font-display text-[7px] border border-neon-green/35 text-neon-green px-3 py-1.5 rounded bg-neon-green/5 hover:bg-neon-green/15 transition">⬇ ROMS LEGAIS (MAMEDEV)</a>
               </div>
               <div className="font-body text-[10px] text-foreground/45 leading-snug">
@@ -889,22 +759,19 @@ function Home() {
                         const isFav = favorites.includes(rom);
                         const isSelected = selectedIndex === idx;
                         const clean = rom.replace(/\.(zip|7z|chd)$/i, "");
-                        const title = displayName(rom);
                         return (
                           <button key={rom}
-                            onClick={() => { loadSounds(); playSound(sndSelect); setSelectedIndex(idx); handleLaunchGame(rom); }}
-                            onMouseEnter={() => { loadSounds(); playSound(sndMove); setSelectedIndex(idx); }}
+                            onClick={() => { setSelectedIndex(idx); handleLaunchGame(rom); }}
+                            onMouseEnter={() => setSelectedIndex(idx)}
                             disabled={isLaunching}
-                            title={title}
                             className={`flex flex-col rounded overflow-hidden border transition disabled:opacity-50 ${isSelected ? "border-neon-cyan/60 shadow-[0_0_12px_rgba(0,229,255,0.3)]" : "border-white/[0.07] hover:border-neon-cyan/30"}`}>
                             <div className="h-24 relative bg-black/50 flex-shrink-0">
-                              <RomArtCard rom={rom} isFavorite={isFav} title={title} />
+                              <RomArtCard rom={rom} isFavorite={isFav} />
                             </div>
                             <div className={`px-2 py-1.5 text-left ${isSelected ? "bg-neon-cyan/10" : "bg-black/40"}`}>
                               <div className="font-display text-[6px] truncate leading-tight"
                                 style={{ color: isSelected ? "#00e5ff" : "rgba(255,255,255,0.5)" }}>
-                                {isFav && "★ "}{title.toUpperCase()}
-                                <span className="opacity-30"> · {clean}</span>
+                                {isFav && "★ "}{clean.toUpperCase()}
                               </div>
                             </div>
                           </button>
@@ -965,7 +832,7 @@ function Home() {
           {sidebarMode === "normal" && (
             <>
               <div className="h-28 border-b border-white/[0.06] overflow-hidden bg-black/50 flex-shrink-0 relative">
-                {selectedRom ? <RomArtCard rom={selectedRom} isFavorite={!!isFavorite} title={displayName(selectedRom)} /> : (
+                {selectedRom ? <RomArtCard rom={selectedRom} isFavorite={!!isFavorite} /> : (
                   <div className="w-full h-full flex items-center justify-center">
                     <div className="text-center">
                       <div className="font-display text-[7px] text-foreground/20 mb-1">SEM IMAGEM</div>
@@ -979,10 +846,7 @@ function Home() {
                 <div className="font-display text-[7px] text-neon-magenta mb-1">// INFORMAÇÕES DO JOGO</div>
                 {selectedRom ? (
                   <div className="flex items-start justify-between gap-1 mb-0.5">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-display text-[10px] text-neon-cyan break-words line-clamp-2 leading-tight">{displayName(selectedRom)}</div>
-                      <div className="font-display text-[7px] text-foreground/35 truncate">{selectedRom}</div>
-                    </div>
+                    <div className="font-display text-[9px] text-neon-cyan break-all line-clamp-2 flex-1 leading-tight">{selectedRom}</div>
                     <button onClick={() => toggleFavorite(selectedRom)} className="flex-shrink-0 transition">
                       <Star size={13} className={isFavorite ? "fill-neon-yellow text-neon-yellow" : "text-foreground/25"} />
                     </button>
@@ -1028,9 +892,8 @@ function Home() {
                   const isSelected = selectedIndex === idx;
                   return (
                     <button key={rom} onClick={() => { setSelectedIndex(idx); handleLaunchGame(rom); }} disabled={isLaunching} onMouseEnter={() => setSelectedIndex(idx)}
-                      title={rom}
                       className={`w-full text-left px-3 py-1.5 font-display text-[8px] transition whitespace-nowrap overflow-hidden text-ellipsis disabled:opacity-50 ${isSelected ? "bg-neon-cyan/10 border-l-2 border-neon-cyan text-neon-cyan" : "text-foreground/45 hover:text-neon-cyan hover:bg-neon-cyan/5"}`}>
-                      {isFav && "★ "}▶ {displayName(rom)}
+                      {isFav && "★ "}▶ {rom}
                     </button>
                   );
                 })
@@ -1051,9 +914,9 @@ function Home() {
                       <button key={rom} onClick={() => { setSelectedIndex(idx); handleLaunchGame(rom); }}
                         onMouseEnter={() => setSelectedIndex(idx)}
                         disabled={isLaunching}
-                        title={`${displayName(rom)} (${rom})`}
+                        title={rom}
                         className={`h-12 relative rounded overflow-hidden border transition disabled:opacity-50 ${isSelected ? "border-neon-cyan/60 shadow-[0_0_8px_rgba(0,229,255,0.4)]" : "border-white/[0.07] hover:border-neon-cyan/30"}`}>
-                        <RomArtCard rom={rom} isFavorite={isFav} compact title={displayName(rom)} />
+                        <RomArtCard rom={rom} isFavorite={isFav} compact />
                       </button>
                     );
                   })}
@@ -1078,7 +941,7 @@ function Home() {
 
       <footer className="fixed bottom-0 left-0 right-0 z-40">
         <div className={`px-4 py-1 flex items-center justify-between ${glass}`}>
-          <div className="font-display text-[7px] text-foreground/25">© 2026 MASTER GAMES ARCADE · MAME LAUNCHER ULTIMATE · <span className="text-fuchsia-400/70">dev emerson 2026</span></div>
+          <div className="font-display text-[7px] text-foreground/25">© 2026 MASTER GAMES ARCADE · MAME LAUNCHER ULTIMATE · <span className="text-neon-magenta/60">DEV EMERSON 2026</span></div>
           {showMameInfo && <span className={`font-display text-[7px] ${mameStatus === "found" ? "text-neon-green animate-blink" : "text-red-400"}`}>{mameStatus === "found" ? "● ONLINE" : "● MAME OFFLINE"}</span>}
         </div>
         <div className="marquee-bar h-[2px] w-full" />
@@ -1097,118 +960,6 @@ function Home() {
           setBrowser(null);
         }}
       />
-
-      {/* PICKER da pasta de instalação do MAME */}
-      <FolderBrowser
-        open={installBrowserOpen}
-        mode="dir"
-        title="ESCOLHER PASTA PARA INSTALAR O MAME"
-        initialPath={installDest}
-        backend={BACKEND}
-        onClose={() => setInstallBrowserOpen(false)}
-        onSelect={(p) => { setInstallDest(p); setInstallBrowserOpen(false); }}
-      />
-
-      {/* JANELA DE INSTALAÇÃO DO MAME */}
-      {installerOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 backdrop-blur-sm" onClick={() => !installProgress.active && setInstallerOpen(false)}>
-          <div
-            className="relative w-[92vw] max-w-xl rounded-lg overflow-hidden border border-neon-yellow/40"
-            style={{ boxShadow: "0 0 48px rgba(255,234,0,0.18)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Cabeçalho com a imagem de fundo do sistema */}
-            <div
-              className="h-32 relative"
-              style={{
-                backgroundImage: "url('/assets/background.png')",
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }}
-            >
-              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/30 to-black/95" />
-              <div className="absolute inset-0 flex flex-col items-center justify-end p-3">
-                <div className="font-display text-[10px] text-neon-yellow tracking-[0.3em]" style={{ textShadow: "0 0 12px #ffea00" }}>
-                  INSTALADOR MAME · OPEN SOURCE
-                </div>
-                <div className="font-display text-[7px] text-neon-cyan mt-1 tracking-widest">MASTER GAMES ARCADE</div>
-              </div>
-              {!installProgress.active && (
-                <button onClick={() => setInstallerOpen(false)} className="absolute top-2 right-2 text-white/80 hover:text-white bg-black/40 rounded p-1"><X size={14} /></button>
-              )}
-            </div>
-
-            <div className="bg-black/95 px-5 py-4 space-y-3">
-              <div className="font-body text-[11px] text-foreground/70 leading-snug">
-                Vamos baixar a versão mais recente do <span className="text-neon-cyan">MAME</span> direto do GitHub oficial
-                (<span className="text-neon-yellow">mamedev/mame</span>) e extrair na pasta escolhida. O sistema vai reconhecer
-                automaticamente o <code className="text-neon-cyan">mame.exe</code> e a pasta <code className="text-neon-cyan">roms/</code> — e lembrar para sempre.
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-display text-[7px] text-neon-cyan block">PASTA DE DESTINO</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={installDest}
-                    onChange={(e) => setInstallDest(e.target.value)}
-                    disabled={installProgress.active}
-                    className="flex-1 px-3 py-1.5 bg-black/40 border border-white/10 text-foreground font-body text-sm rounded focus:outline-none focus:border-neon-yellow/40 disabled:opacity-50"
-                    placeholder="C:\MAME"
-                  />
-                  <button
-                    onClick={() => setInstallBrowserOpen(true)}
-                    disabled={installProgress.active}
-                    className="font-display text-[7px] border border-neon-magenta/40 text-neon-magenta px-3 py-1.5 rounded bg-neon-magenta/5 hover:bg-neon-magenta/15 transition disabled:opacity-40"
-                  ><FolderOpen size={9} className="inline mr-1" />PROCURAR</button>
-                </div>
-              </div>
-
-              {installProgress.active || installProgress.phase === "done" || installProgress.phase === "error" ? (
-                <div className="space-y-2 pt-1">
-                  <div className="h-2 w-full bg-white/[0.06] rounded overflow-hidden">
-                    <div
-                      className="h-full transition-all"
-                      style={{
-                        width: `${installProgress.percent}%`,
-                        background: installProgress.phase === "error" ? "#ef4444" : installProgress.phase === "done" ? "#00e676" : "linear-gradient(90deg, #00e5ff, #ffea00)",
-                      }}
-                    />
-                  </div>
-                  <div className={`font-display text-[8px] ${installProgress.phase === "error" ? "text-red-400" : installProgress.phase === "done" ? "text-neon-green" : "text-neon-yellow"}`}>
-                    {installProgress.phase === "error"
-                      ? `✗ ${installProgress.error || "Falhou"}`
-                      : installProgress.phase === "done"
-                      ? `✓ Instalado em ${installProgress.mamePath}`
-                      : `${installProgress.percent}% · ${installProgress.message || installProgress.phase}`}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="flex gap-2 pt-2 border-t border-white/[0.05]">
-                <button
-                  onClick={startInstallMame}
-                  disabled={installProgress.active || backendStatus !== "ok"}
-                  className="flex-1 font-display text-[8px] border border-neon-yellow/50 text-neon-yellow px-4 py-2 rounded bg-neon-yellow/10 hover:bg-neon-yellow/20 transition disabled:opacity-40"
-                >
-                  {installProgress.active ? "⏳ INSTALANDO..." : installProgress.phase === "done" ? "✓ REINSTALAR" : "⬇ BAIXAR E INSTALAR AGORA"}
-                </button>
-                <button
-                  onClick={() => setInstallerOpen(false)}
-                  disabled={installProgress.active}
-                  className="font-display text-[8px] border border-white/15 text-white/70 px-4 py-2 rounded hover:bg-white/5 disabled:opacity-40"
-                >FECHAR</button>
-              </div>
-
-              {backendStatus !== "ok" && (
-                <div className="font-display text-[7px] text-red-400">
-                  ⚠ Backend offline. Rode <span className="text-neon-yellow">node mame-server.js</span> antes de instalar.
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 }

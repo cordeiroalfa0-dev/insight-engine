@@ -1,117 +1,71 @@
-## Objetivo
+# Atualização: Teclado completo + Upscale Python + Branding DEV EMERSON 2026
 
-Criar um instalador Windows **enxuto (online)** do Master Games Arcade, que ao rodar:
+## 1. Correção silenciosa do erro de runtime
 
-1. Instala o app no PC do usuário
-2. Permite baixar o **MAME open-source** automaticamente
-3. Reconhece sozinho as pastas de `mame.exe` e `roms/` (persistido para sempre)
-4. Usa o `background.png` como ícone do app e arte da janela do instalador
+O `index.tsx` importa `LazyLoadImage` como named export, mas o pacote é CommonJS e isso quebra a página no SSR. Trocar por import default:
 
----
-
-## 1. Preparar build com electron-builder (instalador NSIS online)
-
-Trocar `electron-packager` por **electron-builder** com target `nsis-web` (web installer):
-
-- Gera um `.exe` instalador **pequeno (~2 MB)** que baixa o pacote real (`.7z`) durante a instalação
-- Configurar ícone do app e do instalador a partir de `public/assets/background.png` (convertido para `.ico` 256x256 multi-tamanho via script no build)
-- `oneClick: false`, permite escolher pasta de instalação
-- `perMachine: false` (instala em `%LOCALAPPDATA%`, sem precisar admin)
-
-Arquivo novo: `build/installer.nsh` (header/branding com a imagem de fundo na janela)
-Arquivo novo: `scripts/make-icon.cjs` (gera `build/icon.ico` a partir do PNG usando `png-to-ico`)
-
-`package.json` ganha bloco `"build": { ... }` com:
-
-```
-appId: com.emerson.mastergamesarcade
-productName: Master Games Arcade
-nsisWeb: { oneClick:false, perMachine:false, allowToChangeInstallationDirectory:true,
-           installerIcon, uninstallerIcon, installerHeader, installerSidebar }
+```ts
+import LazyLoad from "react-lazy-load-image-component";
+const { LazyLoadImage } = LazyLoad;
 ```
 
-E scripts: `"dist:web": "electron-builder --win nsis-web"`.
+## 2. Teclado completo (Soco / Chute / Tiro) para QUALQUER ROM
 
----
+Hoje o backend grava `cfg/default.cfg` com 6 botões P1 + 4 P2. Vou expandir para um mapeamento universal pensado para os 3 gêneros mais comuns — luta (Street Fighter/KOF/MK), beat'em up (Cadillacs, Final Fight) e shoot'em up (1942, Metal Slug). Como `default.cfg` é herdado por todas as ROMs e o app já apaga `*.cfg` por-rom, o mesmo mapeamento vale para QUALQUER jogo.
 
-## 2. Persistência permanente dos caminhos
+Mapeamento P1 (teclado):
 
-Hoje os caminhos vivem só em memória do `mame-server.js`. Vamos persistir em disco:
+```text
+Direção: Setas
+SOCO FRACO  (Button1) = A     (também vira "Tiro" em shmups)
+SOCO MÉDIO  (Button2) = S     (também vira "Bomba")
+SOCO FORTE  (Button3) = D     (também vira "Pulo/Especial")
+CHUTE FRACO (Button4) = Z
+CHUTE MÉDIO (Button5) = X
+CHUTE FORTE (Button6) = C
+Start = 1   Coin = 5    ESC = sair
+```
 
-`mame-server.js`:
+Mapeamento P2:
 
-- Carrega/salva `%APPDATA%/MasterGamesArcade/config.json` com `{ mamePath, romsPath }`
-- `/api/set-rompath` passa a gravar nesse arquivo
-- Ao subir, lê o arquivo e usa como padrão → o usuário escolhe **uma vez** e o app lembra para sempre
-- Novo endpoint `GET /api/config` para o front ler
+```text
+Direção: R / F / D / G   (cima/baixo/esq/dir)
+Botões: Y U I H J K (1-6)
+Start = 2   Coin = 6
+```
 
-Front (`Home.tsx`): ao montar, chama `/api/config` e pré-preenche os caminhos.
+No MAME `BUTTONn` é genérico — a mesma tecla `A` é "soco fraco" no SF e "tiro" no 1942, igual a um arcade real. A UI vai mostrar a legenda completa com tooltip explicando os dois nomes.
 
----
+## 3. Automação Python para melhorar resolução/cores das imagens
 
-## 3. Auto-download do MAME open-source
+Criar pasta `scripts/` com `upscale_assets.py` que:
 
-Novo endpoint no `mame-server.js`:
+1. Varre `src/assets/` e `public/assets/` (.png/.jpg/.webp).
+2. Para cada imagem:
+   - Upscale 2x com **Pillow + LANCZOS** (alta qualidade, sem modelo IA pesado).
+   - **ImageEnhance.Color** +15%, **Contrast** +10%, **Sharpness** +25% — valores baseados em práticas de fóruns retro-arcade (RetroArch CRT-Royale, Libretro, BYUU).
+   - `ImageOps.autocontrast` para reduzir banding.
+   - Salva como `_hd.png` ao lado do original (não destrutivo, idempotente).
+3. Gera `assets-manifest.json` com tamanhos antes/depois.
 
-`POST /api/install-mame { destDir }`
+Runner `scripts/upscale.sh` cuida de `pip install pillow` e da execução.
 
-- Baixa o ZIP oficial mais recente do MAME ([https://github.com/mamedev/mame/releases](https://github.com/mamedev/mame/releases)) — binário Windows `mameXXXX64.exe` (self-extracting 7z)
-- Salva em `destDir/mame-installer.exe`
-- Executa em modo silencioso para extrair em `destDir/MAME/`
-- Detecta automaticamente o `mame.exe` extraído e a pasta `roms/` (cria se não existir)
-- Salva esses caminhos no `config.json` → o sistema já reconhece tudo
-- Retorna progresso via SSE (`/api/install-mame/progress`)
+Integração no app: helper `hdSrc()` tenta `_hd.png` primeiro e cai na original como fallback no `LazyLoadImage`.
 
-Front: na janela de instalação (config panel) adiciona botão:
+## 4. Branding "DEV EMERSON 2026"
 
-**"⬇ BAIXAR E INSTALAR MAME (OPEN SOURCE)"**
+Adicionar a assinatura em:
 
-- Abre `FolderBrowser` para escolher pasta destino
-- Mostra barra de progresso (download + extração)
-- Ao terminar, recarrega `/api/config` e a UI já mostra ROMs disponíveis
+- Navbar à direita do logo: `// DEV EMERSON · 2026`
+- Rodapé da sidebar de jogos
+- Attract Mode (tela inativa): faixa inferior piscando `DEV EMERSON 2026`
+- Painel de Config: cabeçalho `MASTER GAMES ARCADE · DEV EMERSON 2026`
+- Telas 404 / Error: assinatura discreta no rodapé
+- `<title>` e meta `author` em `__root.tsx`
 
----
+## Detalhes técnicos
 
-## 4. Branding visual
-
-- `public/assets/background.png` → copiado para `build/icon.png` no prebuild
-- `scripts/make-icon.cjs` gera `build/icon.ico` (Windows) usado por:
-  - Ícone do `.exe` final
-  - Ícone da janela Electron (`electron/main.cjs`)
-  - `installerIcon`, `installerHeader`, `installerSidebar` no NSIS
-- Janela de instalação do app (modal de config) ganha header com `background.png` como fundo translúcido
-
----
-
-## 5. Detalhes técnicos
-
-**Por que `nsis-web` em vez de `nsis` normal?**
-
-- `nsis` → instalador único, ~80 MB (inclui Electron + Chromium)
-- `nsis-web` → stub ~2 MB, baixa o `.7z` real do GitHub Releases durante install → atende o pedido "deixe que ele baixe oque for preciso em meu pc"
-
-**Publicação do `.7z**`: configurado para `provider: github` (basta o usuário criar release no GitHub) **ou** `provider: generic` apontando para qualquer URL.
-
-**Download do MAME**: usado o release oficial do GitHub via API `https://api.github.com/repos/mamedev/mame/releases/latest`, filtrando asset `mame*64.exe`. Extração silenciosa com `mame-installer.exe -y -o"DEST"` (self-extract 7z).
-
-**Persistência cross-session**: `%APPDATA%/MasterGamesArcade/config.json` sobrevive a reinstalações e updates.
-
----
-
-## Arquivos a criar/editar
-
-Criar:
-
-- `build/installer.nsh`
-- `scripts/make-icon.cjs`
-- `scripts/build-installer.bat` (atalho)
-
-Editar:
-
-- `package.json` (deps: `electron-builder`, `png-to-ico`, `7zip-bin`; scripts; bloco `build`)
-- `mame-server.js` (persistência + endpoints install-mame, config)
-- `src/pages/Home.tsx` (botão instalar MAME + progresso + carregar config inicial)
-- `electron/main.cjs` (usar `build/icon.ico`)
-- `iniciar_PROD.bat` (mensagem sobre novo fluxo)
-
-Posso seguir com essa implementação?sim,mas antes corrija o sistema pois cliquei nos botão e não foi para a pagina onde aparece os nomes dos jogos
+- Editados: `src/routes/index.tsx`, `src/routes/__root.tsx`, `mame-server.js`.
+- Criados: `scripts/upscale_assets.py`, `scripts/upscale.sh`, `scripts/README.md`.
+- Sem novas dependências npm — Python (Pillow) fica isolado fora do bundle.
+- Mapeamento compatível com MAME 0.139+ (formato `<port>` / `<newseq>`).
