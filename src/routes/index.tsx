@@ -400,7 +400,14 @@ function Home() {
       const r = await fetch(`${BACKEND}/api/launch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mamePath: mameExePath, romName, showMame: showMameWindow, romPath: romsPath ? `${romsPath}\\${romName}` : undefined }),
+        body: JSON.stringify({
+          mamePath: mameExePath,
+          mamePlusPath: mamePlusExePath,
+          emulator: selectedEmulator,
+          romName,
+          showMame: showMameWindow,
+          romPath: romsPath ? `${romsPath}\\${romName}` : undefined,
+        }),
       });
       const data = await r.json();
       if (data.ok) {
@@ -414,7 +421,7 @@ function Home() {
       } else { playSound(sndError); setLaunchMsg(`✗ ${data.error}`); }
     } catch { playSound(sndError); setLaunchMsg("✗ Falha ao chamar o backend."); }
     finally { setTimeout(() => { setIsLaunching(false); setLaunchingRom(""); setTimeout(() => setLaunchMsg(""), 3000); }, 4000); }
-  }, [mameExePath, backendStatus, romsPath, showMameWindow]);
+  }, [mameExePath, mamePlusExePath, selectedEmulator, backendStatus, romsPath, showMameWindow]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
