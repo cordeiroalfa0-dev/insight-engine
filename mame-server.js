@@ -87,7 +87,7 @@ async function handleRequest(req, res) {
 
   // GET /api/health
   if (req.method === "GET" && url.pathname === "/api/health") {
-    json(res, 200, { ok: true, port: PORT, version: "v3.2" });
+    json(res, 200, { ok: true, port: PORT, version: "v7.0", emulators: ["mame", "mameplus"] });
     return;
   }
 
