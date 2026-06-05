@@ -194,6 +194,51 @@ async function handleRequest(req, res) {
     return;
   }
 
+  // GET /api/emuladores?mamePath=...&mamePlusPath=...
+  // Detecta qual(is) emulador(es) estao disponiveis. Aceita caminhos diretos
+  // dos .exe OU uma pasta-base contendo subpastas mame/ e mameplus/.
+  if (req.method === "GET" && url.pathname === "/api/emuladores") {
+    const mamePathParam = (url.searchParams.get("mamePath") || "").trim();
+    const mamePlusPathParam = (url.searchParams.get("mamePlusPath") || "").trim();
+    const basePathParam = (url.searchParams.get("base") || "").trim();
+
+    function tryResolve(candidates) {
+      for (const c of candidates) {
+        if (!c) continue;
+        try {
+          const abs = path.resolve(c);
+          if (fs.existsSync(abs) && fs.statSync(abs).isFile()) return abs;
+        } catch { /* noop */ }
+      }
+      return "";
+    }
+
+    const mameCandidates = [mamePathParam];
+    const mamePlusCandidates = [mamePlusPathParam];
+    if (basePathParam) {
+      const base = path.resolve(basePathParam);
+      mameCandidates.push(path.join(base, "mame", "mame.exe"));
+      mameCandidates.push(path.join(base, "mame.exe"));
+      mamePlusCandidates.push(path.join(base, "mameplus", "mamep64.exe"));
+      mamePlusCandidates.push(path.join(base, "mameplus", "mamep.exe"));
+      mamePlusCandidates.push(path.join(base, "mamep64.exe"));
+    }
+    if (mamePathParam) {
+      // Se passaram mamePath, tenta deduzir mameplus na pasta irma
+      const parent = path.dirname(path.dirname(path.resolve(mamePathParam)));
+      mamePlusCandidates.push(path.join(parent, "mameplus", "mamep64.exe"));
+      mamePlusCandidates.push(path.join(parent, "mameplus", "mamep.exe"));
+    }
+
+    const mameResolved = tryResolve(mameCandidates);
+    const mamePlusResolved = tryResolve(mamePlusCandidates);
+    json(res, 200, {
+      mame: { id: "mame", label: "MAME 0.288", path: mameResolved, exists: !!mameResolved },
+      mameplus: { id: "mameplus", label: "MAMEPlus 0.168", path: mamePlusResolved, exists: !!mamePlusResolved },
+    });
+    return;
+  }
+
   // POST /api/set-rompath
   if (req.method === "POST" && url.pathname === "/api/set-rompath") {
     let body;
