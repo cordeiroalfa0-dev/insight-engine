@@ -211,6 +211,12 @@ function Home() {
   const [backendStatus, setBackendStatus] = useState<"checking" | "ok" | "offline">("checking");
   const [configMamePath, setConfigMamePath] = useState("C:\\Users\\cordeiro\\Downloads\\Mameplus_0.168.2\\Mameplus_0.168.2\\mame.exe");
   const [configRomsPath, setConfigRomsPath] = useState("C:\\Users\\cordeiro\\Downloads\\Mameplus_0.168.2\\Mameplus_0.168.2\\roms");
+  const [configMamePlusPath, setConfigMamePlusPath] = useState<string>("");
+  const [mamePlusExePath, setMamePlusExePath] = useState<string>("");
+  const [selectedEmulator, setSelectedEmulator] = useState<"mame" | "mameplus">(() => {
+    try { return (localStorage.getItem("mame.emulator") as "mame" | "mameplus") || "mame"; } catch { return "mame"; }
+  });
+  const [emuStatus, setEmuStatus] = useState<{ mame: boolean; mameplus: boolean }>({ mame: false, mameplus: false });
   const [configMsg, setConfigMsg]       = useState("");
   const [launchMsg, setLaunchMsg]       = useState("");
   const [sidebarMode, setSidebarModeState] = useState<SidebarMode>("normal");
