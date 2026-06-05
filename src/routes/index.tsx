@@ -309,7 +309,10 @@ function Home() {
   }, []);
 
   const saveCfg = useCallback((mamePath: string, romsDir: string) => {
-    try { localStorage.setItem(CFG_KEY, JSON.stringify({ mamePath, romsDir })); } catch { /* noop */ }
+    try {
+      const prev = JSON.parse(localStorage.getItem(CFG_KEY) || "{}");
+      localStorage.setItem(CFG_KEY, JSON.stringify({ ...prev, mamePath, romsDir }));
+    } catch { /* noop */ }
     fetch(`${BACKEND}/api/config`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mamePath, romsDir }),
