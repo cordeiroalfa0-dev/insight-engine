@@ -328,9 +328,10 @@ function Home() {
       const h = localStorage.getItem(HIST_KEY); if (h) setHistory(JSON.parse(h));
       const cfg = localStorage.getItem(CFG_KEY);
       if (cfg) {
-        const { mamePath, romsDir } = JSON.parse(cfg);
+        const { mamePath, romsDir, mamePlusPath } = JSON.parse(cfg);
         if (mamePath) { setMameExePath(mamePath); setConfigMamePath(mamePath); }
         if (romsDir)  { setRomsPath(romsDir);    setConfigRomsPath(romsDir); }
+        if (mamePlusPath) { setMamePlusExePath(mamePlusPath); setConfigMamePlusPath(mamePlusPath); }
       }
     } catch { /* noop */ }
     const DEFAULT_MAME = "C:\\Users\\cordeiro\\Downloads\\Mameplus_0.168.2\\Mameplus_0.168.2\\mame.exe";
