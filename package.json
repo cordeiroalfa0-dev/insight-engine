@@ -3,13 +3,59 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "electron:dev": "electron .",
+    "electron:build": "electron-builder --win nsis --x64",
+    "electron:build:portable": "electron-builder --win portable --x64"
+  },
+  "build": {
+    "appId": "com.deveemerson.mastergamesarcade",
+    "productName": "MasterGamesArcade",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "mame-server.js",
+      "intro.html",
+      "intro_bg.mp4",
+      "public/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      { "from": "mame-server.js", "to": "mame-server.js" },
+      { "from": "intro.html", "to": "intro.html" },
+      { "from": "intro_bg.mp4", "to": "intro_bg.mp4" },
+      { "from": "public", "to": "public" }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "public/favicon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Master Games Arcade"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "mame-server.js",
+      "intro.html",
+      "intro_bg.mp4"
+    ]
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",
