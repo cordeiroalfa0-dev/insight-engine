@@ -670,6 +670,65 @@ function Home() {
             </div>
             {configMsg && <div className={`font-display text-[7px] ${configMsg.startsWith("✓") ? "text-neon-green" : configMsg.startsWith("⏳") ? "text-neon-yellow" : "text-red-400"}`}>{configMsg}</div>}
 
+            {/* EMULADOR (MAME 0.288 / MAMEPlus 0.168) */}
+            <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-2">
+              <div className="font-display text-[7px] text-neon-magenta">// EMULADOR</div>
+              <div className="flex gap-2 flex-wrap items-center">
+                <button
+                  onClick={() => pickEmulator("mame")}
+                  className={`font-display text-[8px] px-3 py-1.5 rounded border transition ${selectedEmulator === "mame" ? "border-neon-cyan text-neon-cyan bg-neon-cyan/15" : "border-white/15 text-foreground/55 hover:text-neon-cyan"}`}
+                >
+                  MAME 0.288 {emuStatus.mame ? "●" : "○"}
+                </button>
+                <button
+                  onClick={() => pickEmulator("mameplus")}
+                  disabled={!emuStatus.mameplus && !configMamePlusPath}
+                  className={`font-display text-[8px] px-3 py-1.5 rounded border transition disabled:opacity-40 disabled:cursor-not-allowed ${selectedEmulator === "mameplus" ? "border-neon-magenta text-neon-magenta bg-neon-magenta/15" : "border-white/15 text-foreground/55 hover:text-neon-magenta"}`}
+                >
+                  MAMEPlus 0.168 {emuStatus.mameplus ? "●" : "○"}
+                </button>
+                <span className="font-body text-[10px] text-foreground/45">
+                  {selectedEmulator === "mame"
+                    ? "ROMs do conjunto 0.288 (recente)."
+                    : "ROMs do conjunto 0.168 — compatível com sets antigos (Mameplus 0.168 r5272 x64)."}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <label className="font-display text-[7px] text-neon-cyan block">CAMINHO DO MAMEPlus (mamep64.exe)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="ex: C:\mame\mameplus\mamep64.exe"
+                    value={configMamePlusPath}
+                    onChange={(e) => setConfigMamePlusPath(e.target.value)}
+                    className="flex-1 px-3 py-1.5 bg-black/40 border border-white/10 text-foreground font-body text-sm rounded focus:outline-none focus:border-neon-magenta/40"
+                  />
+                  <button
+                    onClick={() => {
+                      const v = configMamePlusPath.trim();
+                      setMamePlusExePath(v);
+                      try {
+                        const prev = JSON.parse(localStorage.getItem(CFG_KEY) || "{}");
+                        localStorage.setItem(CFG_KEY, JSON.stringify({ ...prev, mamePlusPath: v }));
+                      } catch { /* noop */ }
+                      setConfigMsg(v ? "✓ Caminho MAMEPlus salvo" : "✗ Caminho MAMEPlus vazio");
+                    }}
+                    className="font-display text-[7px] border border-neon-magenta/35 text-neon-magenta px-3 py-1.5 rounded bg-neon-magenta/5 hover:bg-neon-magenta/15 transition"
+                  >
+                    SALVAR
+                  </button>
+                </div>
+                {mamePlusExePath && emuStatus.mameplus && (
+                  <div className="font-body text-[10px] text-neon-green flex items-center gap-1">
+                    <CheckCircle size={9} /> {mamePlusExePath}
+                  </div>
+                )}
+              </div>
+              <div className="font-body text-[10px] text-foreground/55 leading-snug">
+                ⚠ <span className="text-neon-yellow">Aviso de romset:</span> MAME 0.288 e MAMEPlus 0.168 usam <span className="text-neon-cyan">conjuntos de ROMs diferentes</span>. Mantenha pastas separadas e use o emulador correspondente ao set para ROMs limpas.
+              </div>
+            </div>
+
             <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-2">
               <div className="font-display text-[7px] text-neon-magenta">// COMPORTAMENTO DO MAME</div>
 
