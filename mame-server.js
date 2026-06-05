@@ -343,14 +343,18 @@ ${ports}
     return;
   }
 
-  // POST /api/launch  { mamePath, romName, showMame? }
+  // POST /api/launch  { mamePath, mamePlusPath?, emulator?, romName, showMame? }
   if (req.method === "POST" && url.pathname === "/api/launch") {
     let body;
     try { body = await parseBody(req); } catch { json(res, 400, { error: "JSON inválido" }); return; }
-    const { mamePath, romName, showMame } = body;
+    const { mamePath, mamePlusPath, emulator, romName, showMame } = body;
     if (!mamePath || !romName) { json(res, 400, { error: "mamePath e romName obrigatórios" }); return; }
 
-    const mameExe = path.resolve(mamePath.trim());
+    // Resolve qual binario usar conforme o emulador escolhido
+    const chosen = (emulator === "mameplus" && mamePlusPath)
+      ? mamePlusPath.trim()
+      : mamePath.trim();
+    const mameExe = path.resolve(chosen);
     if (!fs.existsSync(mameExe)) {
       json(res, 404, { error: `MAME não encontrado: ${mameExe}` }); return;
     }
@@ -365,7 +369,7 @@ ${ports}
     const baseFlags = "-skip_gameinfo -nogameinfo";
     const flags = showMame ? `${baseFlags} -window` : baseFlags;
 
-    console.log(`[MAME] Iniciando: "${mameExe}" ${rom} ${flags}  (showMame=${!!showMame})`);
+    console.log(`[${emulator || "mame"}] Iniciando: "${mameExe}" ${rom} ${flags}  (showMame=${!!showMame})`);
 
     try {
       const mameExeQuoted = mameExe.includes(" ") ? `"${mameExe}"` : mameExe;
@@ -391,8 +395,8 @@ ${ports}
       child.on("error", (err) => console.error(`[MAME] Erro ao lançar ${rom}:`, err.message));
       child.unref();
 
-      appendLog({ rom, ok: true, pid: child.pid, showMame: !!showMame });
-      json(res, 200, { ok: true, rom, pid: child.pid, cmd, showMame: !!showMame });
+      appendLog({ rom, ok: true, pid: child.pid, showMame: !!showMame, emulator: emulator || "mame" });
+      json(res, 200, { ok: true, rom, pid: child.pid, cmd, showMame: !!showMame, emulator: emulator || "mame", exePath: mameExe });
     } catch (err) {
       console.error(`[MAME] Falha:`, err);
       json(res, 500, { error: `Falha ao iniciar MAME: ${err.message}` });
