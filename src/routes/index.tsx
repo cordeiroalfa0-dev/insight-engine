@@ -374,6 +374,27 @@ function Home() {
     return () => clearInterval(interval);
   }, [romsPath, backendStatus, scanRoms]);
 
+  // Detecta os dois emuladores (MAME 0.288 + MAMEPlus 0.168) automaticamente
+  useEffect(() => {
+    if (backendStatus !== "ok" || !mameExePath) return;
+    const qs = new URLSearchParams({ mamePath: mameExePath, mamePlusPath: mamePlusExePath || "" });
+    fetch(`${BACKEND}/api/emuladores?${qs.toString()}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setEmuStatus({ mame: !!d?.mame?.exists, mameplus: !!d?.mameplus?.exists });
+        if (d?.mameplus?.exists && !mamePlusExePath) {
+          setMamePlusExePath(d.mameplus.path);
+          setConfigMamePlusPath(d.mameplus.path);
+        }
+      })
+      .catch(() => { /* noop */ });
+  }, [backendStatus, mameExePath, mamePlusExePath]);
+
+  const pickEmulator = useCallback((e: "mame" | "mameplus") => {
+    setSelectedEmulator(e);
+    try { localStorage.setItem("mame.emulator", e); } catch { /* noop */ }
+  }, []);
+
   const filteredRoms = useMemo(() => getFilteredRoms(), [getFilteredRoms]);
 
   const toggleFavorite = useCallback((rom: string) => {
