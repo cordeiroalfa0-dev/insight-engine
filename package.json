@@ -35,7 +35,9 @@
       { "from": "mame-server.js", "to": "mame-server.js" },
       { "from": "intro.html", "to": "intro.html" },
       { "from": "intro_bg.mp4", "to": "intro_bg.mp4" },
-      { "from": "public", "to": "public" }
+      { "from": "public", "to": "public" },
+      { "from": "resources/mame", "to": "mame" },
+      { "from": "resources/mameplus", "to": "mameplus" }
     ],
     "win": {
       "target": [

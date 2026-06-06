@@ -6,10 +6,8 @@ import { useSpring, animated as animatedRaw } from "@react-spring/web";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const animated: any = animatedRaw;
 
-import LazyLoadPkg from "react-lazy-load-image-component";
+import { LazyLoadImage } from "react-lazy-load-image-component";
 import "react-lazy-load-image-component/src/effects/opacity.css";
-// Pacote é CommonJS — usar default + destructure evita o erro de named export no SSR.
-const { LazyLoadImage } = LazyLoadPkg as unknown as { LazyLoadImage: React.ComponentType<React.ImgHTMLAttributes<HTMLImageElement> & { effect?: string; threshold?: number; wrapperClassName?: string }> };
 import { Howl } from "howler";
 import localforage from "localforage";
 import { useDebounce } from "use-debounce";
@@ -194,7 +192,6 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const [mameExePath, setMameExePath]   = useState<string>("");
   const [romsPath, setRomsPath]         = useState<string>("");
   const [romsList, setRomsList]         = useState<string[]>([]);
   const [favorites, setFavorites]       = useState<string[]>([]);
@@ -207,23 +204,15 @@ function Home() {
   const [showConfig, setShowConfig]     = useState(false);
   const [showMameInfo, setShowMameInfo] = useState(false);
   const [launchingRom, setLaunchingRom] = useState<string>("");
-  const [mameStatus, setMameStatus]     = useState<"checking" | "found" | "not_found">("checking");
   const [backendStatus, setBackendStatus] = useState<"checking" | "ok" | "offline">("checking");
-  const [configMamePath, setConfigMamePath] = useState("C:\\Users\\cordeiro\\Downloads\\Mameplus_0.168.2\\Mameplus_0.168.2\\mame.exe");
-  const [configRomsPath, setConfigRomsPath] = useState("C:\\Users\\cordeiro\\Downloads\\Mameplus_0.168.2\\Mameplus_0.168.2\\roms");
-  const [configMamePlusPath, setConfigMamePlusPath] = useState<string>("");
-  const [mamePlusExePath, setMamePlusExePath] = useState<string>("");
-  const [selectedEmulator, setSelectedEmulator] = useState<"mame" | "mameplus">(() => {
-    try { return (localStorage.getItem("mame.emulator") as "mame" | "mameplus") || "mame"; } catch { return "mame"; }
-  });
+  const [configRomsPath, setConfigRomsPath] = useState("");
+  const [selectedEmulator, setSelectedEmulator] = useState<"mame" | "mameplus">("mame");
   const [emuStatus, setEmuStatus] = useState<{ mame: boolean; mameplus: boolean }>({ mame: false, mameplus: false });
   const [configMsg, setConfigMsg]       = useState("");
   const [launchMsg, setLaunchMsg]       = useState("");
   const [sidebarMode, setSidebarModeState] = useState<SidebarMode>("normal");
-  const [browser, setBrowser] = useState<null | "mame" | "roms">(null);
-  const [showMameWindow, setShowMameWindow] = useState<boolean>(() => {
-    try { return localStorage.getItem("mame.showWindow") === "1"; } catch { return false; }
-  });
+  const [browser, setBrowser] = useState<null | "roms">(null);
+  const [showMameWindow, setShowMameWindow] = useState<boolean>(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef  = useRef<HTMLDivElement>(null);
   const gridScrollRef = useRef<HTMLDivElement>(null);
@@ -285,15 +274,6 @@ function Home() {
     return false;
   }, []);
 
-  const checkMame = useCallback(async (mamePath: string) => {
-    if (!mamePath) { setMameStatus("not_found"); return; }
-    try {
-      const r = await fetch(`${BACKEND}/api/check-mame?path=${encodeURIComponent(mamePath)}`);
-      const data = await r.json();
-      setMameStatus(data.exists ? "found" : "not_found");
-    } catch { setMameStatus("not_found"); }
-  }, []);
-
   const scanRoms = useCallback(async (romsDir: string) => {
     if (!romsDir) return;
     try {
@@ -308,14 +288,14 @@ function Home() {
     } catch { setConfigMsg("✗ Erro ao conectar no backend"); }
   }, []);
 
-  const saveCfg = useCallback((mamePath: string, romsDir: string) => {
+  const saveCfg = useCallback((romsDir: string) => {
     try {
       const prev = JSON.parse(localStorage.getItem(CFG_KEY) || "{}");
-      localStorage.setItem(CFG_KEY, JSON.stringify({ ...prev, mamePath, romsDir }));
+      localStorage.setItem(CFG_KEY, JSON.stringify({ ...prev, romsDir }));
     } catch { /* noop */ }
     fetch(`${BACKEND}/api/config`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mamePath, romsDir }),
+      body: JSON.stringify({ romsDir }),
     }).catch(() => { /* noop */ });
   }, []);
 
@@ -331,36 +311,32 @@ function Home() {
       const h = localStorage.getItem(HIST_KEY); if (h) setHistory(JSON.parse(h));
       const cfg = localStorage.getItem(CFG_KEY);
       if (cfg) {
-        const { mamePath, romsDir, mamePlusPath } = JSON.parse(cfg);
-        if (mamePath) { setMameExePath(mamePath); setConfigMamePath(mamePath); }
-        if (romsDir)  { setRomsPath(romsDir);    setConfigRomsPath(romsDir); }
-        if (mamePlusPath) { setMamePlusExePath(mamePlusPath); setConfigMamePlusPath(mamePlusPath); }
+        const { romsDir } = JSON.parse(cfg);
+        if (romsDir) { setRomsPath(romsDir); setConfigRomsPath(romsDir); }
       }
+      const emu = localStorage.getItem("mame.emulator");
+      if (emu === "mame" || emu === "mameplus") setSelectedEmulator(emu);
+      setShowMameWindow(localStorage.getItem("mame.showWindow") === "1");
     } catch { /* noop */ }
-    const DEFAULT_MAME = "C:\\Users\\cordeiro\\Downloads\\Mameplus_0.168.2\\Mameplus_0.168.2\\mame.exe";
-    const DEFAULT_ROMS = "C:\\Users\\cordeiro\\Downloads\\Mameplus_0.168.2\\Mameplus_0.168.2\\roms";
     checkBackend().then(async (ok) => {
-      if (!ok) { setMameStatus("not_found"); return; }
-      let mamePath = "", romsDir = "";
+      if (!ok) return;
+      let romsDir = "";
       try {
         const cfg = localStorage.getItem(CFG_KEY);
-        if (cfg) { const c = JSON.parse(cfg); mamePath = c.mamePath || ""; romsDir = c.romsDir || ""; }
+        if (cfg) { const c = JSON.parse(cfg); romsDir = c.romsDir || ""; }
       } catch { /* noop */ }
-      if (!mamePath || !romsDir) {
+      if (!romsDir) {
         try {
           const r = await fetch(`${BACKEND}/api/config`);
           const srv = await r.json();
-          if (srv.mamePath && !mamePath) mamePath = srv.mamePath;
-          if (srv.romsDir  && !romsDir)  romsDir  = srv.romsDir;
+          if (srv.romsDir) romsDir = srv.romsDir;
         } catch { /* noop */ }
       }
-      if (!mamePath) mamePath = DEFAULT_MAME;
-      if (!romsDir)  romsDir  = DEFAULT_ROMS;
-      setMameExePath(mamePath); setConfigMamePath(mamePath);
-      setRomsPath(romsDir);     setConfigRomsPath(romsDir);
-      saveCfg(mamePath, romsDir);
-      checkMame(mamePath);
-      scanRoms(romsDir);
+      if (romsDir) {
+        setRomsPath(romsDir); setConfigRomsPath(romsDir);
+        saveCfg(romsDir);
+        scanRoms(romsDir);
+      }
     });
     inputRef.current?.focus();
     const healthInterval = setInterval(() => { checkBackend(); }, 5000);
@@ -374,21 +350,14 @@ function Home() {
     return () => clearInterval(interval);
   }, [romsPath, backendStatus, scanRoms]);
 
-  // Detecta os dois emuladores (MAME 0.288 + MAMEPlus 0.168) automaticamente
+  // Detecta os dois emuladores embutidos (resolvidos no backend via env)
   useEffect(() => {
-    if (backendStatus !== "ok" || !mameExePath) return;
-    const qs = new URLSearchParams({ mamePath: mameExePath, mamePlusPath: mamePlusExePath || "" });
-    fetch(`${BACKEND}/api/emuladores?${qs.toString()}`)
+    if (backendStatus !== "ok") return;
+    fetch(`${BACKEND}/api/emuladores`)
       .then((r) => r.json())
-      .then((d) => {
-        setEmuStatus({ mame: !!d?.mame?.exists, mameplus: !!d?.mameplus?.exists });
-        if (d?.mameplus?.exists && !mamePlusExePath) {
-          setMamePlusExePath(d.mameplus.path);
-          setConfigMamePlusPath(d.mameplus.path);
-        }
-      })
+      .then((d) => setEmuStatus({ mame: !!d?.mame?.exists, mameplus: !!d?.mameplus?.exists }))
       .catch(() => { /* noop */ });
-  }, [backendStatus, mameExePath, mamePlusExePath]);
+  }, [backendStatus]);
 
   const pickEmulator = useCallback((e: "mame" | "mameplus") => {
     setSelectedEmulator(e);
@@ -406,15 +375,16 @@ function Home() {
   }, []);
 
   const handleLaunchGame = useCallback(async (romName: string) => {
-    if (!mameExePath) {
-      playSound(sndError);
-      setLaunchMsg("✗ Configure o caminho do MAME em ⚙ CONFIG (ESC)");
-      setTimeout(() => setLaunchMsg(""), 3000); return;
-    }
     if (backendStatus !== "ok") {
       playSound(sndError);
       setLaunchMsg("✗ Backend offline! Abra um terminal e rode: node mame-server.js");
       setTimeout(() => setLaunchMsg(""), 5000); return;
+    }
+    const emuOk = selectedEmulator === "mameplus" ? emuStatus.mameplus : emuStatus.mame;
+    if (!emuOk) {
+      playSound(sndError);
+      setLaunchMsg(`✗ ${selectedEmulator === "mameplus" ? "MAMEPlus" : "MAME"} não encontrado nos recursos do app`);
+      setTimeout(() => setLaunchMsg(""), 4000); return;
     }
     playSound(sndLaunch);
     setIsLaunching(true);
@@ -426,12 +396,9 @@ function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mamePath: mameExePath,
-          mamePlusPath: mamePlusExePath,
           emulator: selectedEmulator,
           romName,
           showMame: showMameWindow,
-          romPath: romsPath ? `${romsPath}\\${romName}` : undefined,
         }),
       });
       const data = await r.json();
@@ -446,7 +413,7 @@ function Home() {
       } else { playSound(sndError); setLaunchMsg(`✗ ${data.error}`); }
     } catch { playSound(sndError); setLaunchMsg("✗ Falha ao chamar o backend."); }
     finally { setTimeout(() => { setIsLaunching(false); setLaunchingRom(""); setTimeout(() => setLaunchMsg(""), 3000); }, 4000); }
-  }, [mameExePath, mamePlusExePath, selectedEmulator, backendStatus, romsPath, showMameWindow]);
+  }, [selectedEmulator, backendStatus, showMameWindow, emuStatus]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -493,35 +460,8 @@ function Home() {
     }
   }, [selectedIndex]);
 
-  const handleApplyMamePath = async () => {
-    if (!configMamePath.trim()) { setConfigMsg("✗ Informe o caminho do mame.exe"); return; }
-    setConfigMsg("⏳ Verificando...");
-    const alive = await checkBackend();
-    if (!alive) { setConfigMsg("✗ Backend offline! Rode: node mame-server.js"); return; }
-    const r = await fetch(`${BACKEND}/api/check-mame?path=${encodeURIComponent(configMamePath.trim())}`);
-    const data = await r.json();
-    if (data.exists) {
-      setMameExePath(configMamePath.trim());
-      setMameStatus("found");
-      if (data.currentRompath) {
-        setConfigRomsPath(data.currentRompath);
-        setRomsPath(data.currentRompath);
-        saveCfg(configMamePath.trim(), data.currentRompath);
-        setConfigMsg(`✓ MAME encontrado! rompath do mame.ini: ${data.currentRompath}`);
-        await scanRoms(data.currentRompath);
-      } else {
-        saveCfg(configMamePath.trim(), romsPath);
-        setConfigMsg("✓ MAME encontrado! Agora configure a pasta de ROMs.");
-      }
-    } else {
-      setMameStatus("not_found");
-      setConfigMsg(`✗ Arquivo não encontrado: ${data.path}`);
-    }
-  };
-
   const handleScanRoms = async () => {
     if (!configRomsPath.trim()) { setConfigMsg("✗ Informe a pasta de ROMs"); return; }
-    if (!mameExePath) { setConfigMsg("✗ Configure o MAME primeiro antes de escanear"); return; }
     setConfigMsg("⏳ Escaneando e salvando no mame.ini...");
     const alive = await checkBackend();
     if (!alive) { setConfigMsg("✗ Backend offline! Rode: node mame-server.js"); return; }
@@ -529,21 +469,22 @@ function Home() {
       const iniRes = await fetch(`${BACKEND}/api/set-rompath`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mamePath: mameExePath, romsPath: configRomsPath.trim() }),
+        body: JSON.stringify({ romsPath: configRomsPath.trim() }),
       });
       const iniData = await iniRes.json();
       if (!iniData.ok) { setConfigMsg(`✗ Erro ao salvar mame.ini: ${iniData.error}`); return; }
     } catch { setConfigMsg("✗ Falha ao salvar no mame.ini"); return; }
     setRomsPath(configRomsPath.trim());
-    saveCfg(mameExePath, configRomsPath.trim());
+    saveCfg(configRomsPath.trim());
     await scanRoms(configRomsPath.trim());
   };
 
   const historyRoms     = history.slice(0, 5).map((h) => h.rom);
   const selectedRom     = filteredRoms[selectedIndex];
   const isFavorite      = selectedRom && favorites.includes(selectedRom);
-  const mameStatusLabel = mameStatus === "checking" ? "⏳ VERIFICANDO" : mameStatus === "found" ? "✓ OK" : "✗ NÃO ENCONTRADO";
-  const mameStatusColor = mameStatus === "found" ? "text-neon-green" : mameStatus === "not_found" ? "text-red-400" : "text-neon-yellow";
+  const anyEmuOk        = emuStatus.mame || emuStatus.mameplus;
+  const mameStatusLabel = backendStatus === "checking" ? "⏳ VERIFICANDO" : anyEmuOk ? "✓ OK" : "✗ NÃO ENCONTRADO";
+  const mameStatusColor = anyEmuOk ? "text-neon-green" : backendStatus === "checking" ? "text-neon-yellow" : "text-red-400";
   const glass           = "bg-black/40 backdrop-blur-md border border-neon-cyan/20";
   const glassDark       = "bg-black/55 backdrop-blur-xl border border-neon-cyan/15";
 
@@ -651,14 +592,8 @@ function Home() {
             </div>
           )}
           <div className="space-y-3 max-w-2xl">
-            <div className="space-y-1">
-              <label className="font-display text-[7px] text-neon-cyan block">CAMINHO DO MAME (.exe)</label>
-              <div className="flex gap-2">
-                <input type="text" placeholder="ex: C:\mame\mame.exe" value={configMamePath} onChange={(e) => setConfigMamePath(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleApplyMamePath()} className="flex-1 px-3 py-1.5 bg-black/40 border border-white/10 text-foreground font-body text-sm rounded focus:outline-none focus:border-neon-cyan/40" />
-                <button onClick={() => setBrowser("mame")} title="Procurar mame.exe" className="font-display text-[7px] border border-neon-magenta/40 text-neon-magenta px-3 py-1.5 rounded bg-neon-magenta/5 hover:bg-neon-magenta/15 transition"><FolderOpen size={9} className="inline mr-1" />PROCURAR</button>
-                <button onClick={handleApplyMamePath} className="font-display text-[7px] border border-neon-cyan/35 text-neon-cyan px-3 py-1.5 rounded bg-neon-cyan/5 hover:bg-neon-cyan/15 transition">VERIFICAR</button>
-              </div>
-              {mameExePath && <div className="font-body text-[10px] text-neon-green flex items-center gap-1"><CheckCircle size={9} /> {mameExePath}</div>}
+            <div className="px-3 py-2 rounded border border-neon-cyan/20 bg-neon-cyan/[0.04] font-body text-[10px] text-foreground/65 leading-snug">
+              <span className="text-neon-cyan font-display text-[8px]">ℹ EMULADORES EMBUTIDOS:</span> MAME 0.288 e MAMEPlus 0.168 vêm dentro do app — não é preciso configurar caminhos no PC. Você só precisa apontar a <span className="text-neon-yellow">PASTA DE ROMs</span>.
             </div>
             <div className="space-y-1">
               <label className="font-display text-[7px] text-neon-cyan block">PASTA DE ROMs</label>
@@ -682,7 +617,7 @@ function Home() {
                 </button>
                 <button
                   onClick={() => pickEmulator("mameplus")}
-                  disabled={!emuStatus.mameplus && !configMamePlusPath}
+                  disabled={!emuStatus.mameplus}
                   className={`font-display text-[8px] px-3 py-1.5 rounded border transition disabled:opacity-40 disabled:cursor-not-allowed ${selectedEmulator === "mameplus" ? "border-neon-magenta text-neon-magenta bg-neon-magenta/15" : "border-white/15 text-foreground/55 hover:text-neon-magenta"}`}
                 >
                   MAMEPlus 0.168 {emuStatus.mameplus ? "●" : "○"}
@@ -692,37 +627,6 @@ function Home() {
                     ? "ROMs do conjunto 0.288 (recente)."
                     : "ROMs do conjunto 0.168 — compatível com sets antigos (Mameplus 0.168 r5272 x64)."}
                 </span>
-              </div>
-              <div className="space-y-1">
-                <label className="font-display text-[7px] text-neon-cyan block">CAMINHO DO MAMEPlus (mamep64.exe)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="ex: C:\mame\mameplus\mamep64.exe"
-                    value={configMamePlusPath}
-                    onChange={(e) => setConfigMamePlusPath(e.target.value)}
-                    className="flex-1 px-3 py-1.5 bg-black/40 border border-white/10 text-foreground font-body text-sm rounded focus:outline-none focus:border-neon-magenta/40"
-                  />
-                  <button
-                    onClick={() => {
-                      const v = configMamePlusPath.trim();
-                      setMamePlusExePath(v);
-                      try {
-                        const prev = JSON.parse(localStorage.getItem(CFG_KEY) || "{}");
-                        localStorage.setItem(CFG_KEY, JSON.stringify({ ...prev, mamePlusPath: v }));
-                      } catch { /* noop */ }
-                      setConfigMsg(v ? "✓ Caminho MAMEPlus salvo" : "✗ Caminho MAMEPlus vazio");
-                    }}
-                    className="font-display text-[7px] border border-neon-magenta/35 text-neon-magenta px-3 py-1.5 rounded bg-neon-magenta/5 hover:bg-neon-magenta/15 transition"
-                  >
-                    SALVAR
-                  </button>
-                </div>
-                {mamePlusExePath && emuStatus.mameplus && (
-                  <div className="font-body text-[10px] text-neon-green flex items-center gap-1">
-                    <CheckCircle size={9} /> {mamePlusExePath}
-                  </div>
-                )}
               </div>
               <div className="font-body text-[10px] text-foreground/55 leading-snug">
                 ⚠ <span className="text-neon-yellow">Aviso de romset:</span> MAME 0.288 e MAMEPlus 0.168 usam <span className="text-neon-cyan">conjuntos de ROMs diferentes</span>. Mantenha pastas separadas e use o emulador correspondente ao set para ROMs limpas.
@@ -751,13 +655,12 @@ function Home() {
               <div className="flex flex-wrap gap-2 items-center">
                 <button
                   onClick={async () => {
-                    if (!mameExePath) { setConfigMsg("✗ Configure o MAME primeiro"); return; }
                     setConfigMsg("⏳ Aplicando teclado padrão...");
                     try {
                       const r = await fetch(`${BACKEND}/api/reset-controls`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ mamePath: mameExePath }),
+                        body: JSON.stringify({}),
                       });
                       const data = await r.json();
                       if (data.ok) setConfigMsg(`✓ Teclado configurado em todas as ROMs (${data.mappings} teclas)`);
@@ -796,10 +699,10 @@ function Home() {
           <span className="font-display text-[7px] text-red-300">Backend offline! Abra um terminal e rode: <span className="text-neon-yellow">node mame-server.js</span></span>
         </div>
       )}
-      {showMameInfo && backendStatus === "ok" && mameStatus === "not_found" && !showConfig && (
+      {showMameInfo && backendStatus === "ok" && !anyEmuOk && !showConfig && (
         <div className="fixed top-[46px] left-3 right-3 z-[38] rounded-b-md px-4 py-2 bg-yellow-900/25 border border-yellow-500/25 backdrop-blur-md flex items-center gap-2">
           <AlertTriangle size={11} className="text-yellow-400 flex-shrink-0" />
-          <span className="font-display text-[7px] text-yellow-300">MAME não configurado. Clique em CONFIG (ESC) para definir os caminhos.</span>
+          <span className="font-display text-[7px] text-yellow-300">Nenhum emulador detectado nos recursos do app.</span>
         </div>
       )}
 
@@ -907,7 +810,7 @@ function Home() {
               <>
                 <h1 className="font-display text-[13px] leading-tight text-neon-magenta mb-1">SELECIONE<br />SEU JOGO</h1>
                 <p className="font-body text-[11px] text-foreground/35 mb-2">
-                  {mameStatus === "found" ? `✓ MAME · ${romsList.length} jogos · ${favorites.length} favoritos` : mameStatus === "checking" ? "⏳ Verificando MAME..." : "⚠ MAME não configurado"}
+                  {anyEmuOk ? `✓ MAME · ${romsList.length} jogos · ${favorites.length} favoritos` : backendStatus === "checking" ? "⏳ Verificando MAME..." : "⚠ Nenhum emulador detectado"}
                 </p>
                 {showMameInfo && (
                   <div className="bg-black/30 border border-white/[0.05] rounded px-2 py-1.5">
@@ -1039,21 +942,20 @@ function Home() {
       <footer className="fixed bottom-0 left-0 right-0 z-40">
         <div className={`px-4 py-1 flex items-center justify-between ${glass}`}>
           <div className="font-display text-[7px] text-foreground/25">© 2026 MASTER GAMES ARCADE · MAME LAUNCHER ULTIMATE · <span className="text-neon-magenta/60">DEV EMERSON 2026</span></div>
-          {showMameInfo && <span className={`font-display text-[7px] ${mameStatus === "found" ? "text-neon-green animate-blink" : "text-red-400"}`}>{mameStatus === "found" ? "● ONLINE" : "● MAME OFFLINE"}</span>}
+          {showMameInfo && <span className={`font-display text-[7px] ${anyEmuOk ? "text-neon-green animate-blink" : "text-red-400"}`}>{anyEmuOk ? "● ONLINE" : "● MAME OFFLINE"}</span>}
         </div>
         <div className="marquee-bar h-[2px] w-full" />
       </footer>
 
       <FolderBrowser
         open={browser !== null}
-        mode={browser === "mame" ? "exe" : "dir"}
-        title={browser === "mame" ? "PROCURAR MAME.EXE" : "PROCURAR PASTA DE ROMS"}
-        initialPath={browser === "mame" ? configMamePath : configRomsPath}
+        mode="dir"
+        title="PROCURAR PASTA DE ROMS"
+        initialPath={configRomsPath}
         backend={BACKEND}
         onClose={() => setBrowser(null)}
         onSelect={(p) => {
-          if (browser === "mame") setConfigMamePath(p);
-          else setConfigRomsPath(p);
+          setConfigRomsPath(p);
           setBrowser(null);
         }}
       />
