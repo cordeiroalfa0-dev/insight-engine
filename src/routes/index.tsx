@@ -192,7 +192,6 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const [mameExePath, setMameExePath]   = useState<string>("");
   const [romsPath, setRomsPath]         = useState<string>("");
   const [romsList, setRomsList]         = useState<string[]>([]);
   const [favorites, setFavorites]       = useState<string[]>([]);
@@ -205,23 +204,15 @@ function Home() {
   const [showConfig, setShowConfig]     = useState(false);
   const [showMameInfo, setShowMameInfo] = useState(false);
   const [launchingRom, setLaunchingRom] = useState<string>("");
-  const [mameStatus, setMameStatus]     = useState<"checking" | "found" | "not_found">("checking");
   const [backendStatus, setBackendStatus] = useState<"checking" | "ok" | "offline">("checking");
-  const [configMamePath, setConfigMamePath] = useState("C:\\Users\\cordeiro\\Downloads\\Mameplus_0.168.2\\Mameplus_0.168.2\\mame.exe");
-  const [configRomsPath, setConfigRomsPath] = useState("C:\\Users\\cordeiro\\Downloads\\Mameplus_0.168.2\\Mameplus_0.168.2\\roms");
-  const [configMamePlusPath, setConfigMamePlusPath] = useState<string>("");
-  const [mamePlusExePath, setMamePlusExePath] = useState<string>("");
-  const [selectedEmulator, setSelectedEmulator] = useState<"mame" | "mameplus">(() => {
-    try { return (localStorage.getItem("mame.emulator") as "mame" | "mameplus") || "mame"; } catch { return "mame"; }
-  });
+  const [configRomsPath, setConfigRomsPath] = useState("");
+  const [selectedEmulator, setSelectedEmulator] = useState<"mame" | "mameplus">("mame");
   const [emuStatus, setEmuStatus] = useState<{ mame: boolean; mameplus: boolean }>({ mame: false, mameplus: false });
   const [configMsg, setConfigMsg]       = useState("");
   const [launchMsg, setLaunchMsg]       = useState("");
   const [sidebarMode, setSidebarModeState] = useState<SidebarMode>("normal");
-  const [browser, setBrowser] = useState<null | "mame" | "roms">(null);
-  const [showMameWindow, setShowMameWindow] = useState<boolean>(() => {
-    try { return localStorage.getItem("mame.showWindow") === "1"; } catch { return false; }
-  });
+  const [browser, setBrowser] = useState<null | "roms">(null);
+  const [showMameWindow, setShowMameWindow] = useState<boolean>(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef  = useRef<HTMLDivElement>(null);
   const gridScrollRef = useRef<HTMLDivElement>(null);
