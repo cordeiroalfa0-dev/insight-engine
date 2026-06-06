@@ -13,6 +13,12 @@ const ROOT = isDev ? path.join(__dirname, "..") : process.resourcesPath;
 const APP_PORT = 8080;
 const MAME_PORT = 7777;
 
+// Caminhos fixos dos emuladores embutidos no instalador.
+// Em produção: <resources>/mame|mameplus. Em dev: <repo>/resources/...
+const RES_BASE = app.isPackaged ? process.resourcesPath : path.join(__dirname, "..", "resources");
+const MAME_EXE     = path.join(RES_BASE, "mame", "mame.exe");
+const MAMEPLUS_EXE = path.join(RES_BASE, "mameplus", "mamep64.exe");
+
 let mainWindow = null;
 let mameServerProc = null;
 let viteProc = null;
@@ -47,10 +53,17 @@ function spawnMameServer() {
     return;
   }
   log("Iniciando mame-server.js...");
-  // Usa o node embutido no Electron (process.execPath) com ELECTRON_RUN_AS_NODE=1
+  // Usa o node embutido no Electron (process.execPath) com ELECTRON_RUN_AS_NODE=1.
+  // Injeta MGA_MAME_EXE / MGA_MAMEPLUS_EXE para o backend resolver os binarios
+  // sem precisar consultar o usuario.
   mameServerProc = spawn(process.execPath, [serverPath], {
     cwd: ROOT,
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: "1",
+      MGA_MAME_EXE: MAME_EXE,
+      MGA_MAMEPLUS_EXE: MAMEPLUS_EXE,
+    },
     stdio: "inherit",
   });
   mameServerProc.on("exit", (code) => log("mame-server saiu com código", code));
