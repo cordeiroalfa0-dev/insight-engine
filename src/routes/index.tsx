@@ -274,15 +274,6 @@ function Home() {
     return false;
   }, []);
 
-  const checkMame = useCallback(async (mamePath: string) => {
-    if (!mamePath) { setMameStatus("not_found"); return; }
-    try {
-      const r = await fetch(`${BACKEND}/api/check-mame?path=${encodeURIComponent(mamePath)}`);
-      const data = await r.json();
-      setMameStatus(data.exists ? "found" : "not_found");
-    } catch { setMameStatus("not_found"); }
-  }, []);
-
   const scanRoms = useCallback(async (romsDir: string) => {
     if (!romsDir) return;
     try {
@@ -297,14 +288,14 @@ function Home() {
     } catch { setConfigMsg("✗ Erro ao conectar no backend"); }
   }, []);
 
-  const saveCfg = useCallback((mamePath: string, romsDir: string) => {
+  const saveCfg = useCallback((romsDir: string) => {
     try {
       const prev = JSON.parse(localStorage.getItem(CFG_KEY) || "{}");
-      localStorage.setItem(CFG_KEY, JSON.stringify({ ...prev, mamePath, romsDir }));
+      localStorage.setItem(CFG_KEY, JSON.stringify({ ...prev, romsDir }));
     } catch { /* noop */ }
     fetch(`${BACKEND}/api/config`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mamePath, romsDir }),
+      body: JSON.stringify({ romsDir }),
     }).catch(() => { /* noop */ });
   }, []);
 
@@ -320,36 +311,32 @@ function Home() {
       const h = localStorage.getItem(HIST_KEY); if (h) setHistory(JSON.parse(h));
       const cfg = localStorage.getItem(CFG_KEY);
       if (cfg) {
-        const { mamePath, romsDir, mamePlusPath } = JSON.parse(cfg);
-        if (mamePath) { setMameExePath(mamePath); setConfigMamePath(mamePath); }
-        if (romsDir)  { setRomsPath(romsDir);    setConfigRomsPath(romsDir); }
-        if (mamePlusPath) { setMamePlusExePath(mamePlusPath); setConfigMamePlusPath(mamePlusPath); }
+        const { romsDir } = JSON.parse(cfg);
+        if (romsDir) { setRomsPath(romsDir); setConfigRomsPath(romsDir); }
       }
+      const emu = localStorage.getItem("mame.emulator");
+      if (emu === "mame" || emu === "mameplus") setSelectedEmulator(emu);
+      setShowMameWindow(localStorage.getItem("mame.showWindow") === "1");
     } catch { /* noop */ }
-    const DEFAULT_MAME = "C:\\Users\\cordeiro\\Downloads\\Mameplus_0.168.2\\Mameplus_0.168.2\\mame.exe";
-    const DEFAULT_ROMS = "C:\\Users\\cordeiro\\Downloads\\Mameplus_0.168.2\\Mameplus_0.168.2\\roms";
     checkBackend().then(async (ok) => {
-      if (!ok) { setMameStatus("not_found"); return; }
-      let mamePath = "", romsDir = "";
+      if (!ok) return;
+      let romsDir = "";
       try {
         const cfg = localStorage.getItem(CFG_KEY);
-        if (cfg) { const c = JSON.parse(cfg); mamePath = c.mamePath || ""; romsDir = c.romsDir || ""; }
+        if (cfg) { const c = JSON.parse(cfg); romsDir = c.romsDir || ""; }
       } catch { /* noop */ }
-      if (!mamePath || !romsDir) {
+      if (!romsDir) {
         try {
           const r = await fetch(`${BACKEND}/api/config`);
           const srv = await r.json();
-          if (srv.mamePath && !mamePath) mamePath = srv.mamePath;
-          if (srv.romsDir  && !romsDir)  romsDir  = srv.romsDir;
+          if (srv.romsDir) romsDir = srv.romsDir;
         } catch { /* noop */ }
       }
-      if (!mamePath) mamePath = DEFAULT_MAME;
-      if (!romsDir)  romsDir  = DEFAULT_ROMS;
-      setMameExePath(mamePath); setConfigMamePath(mamePath);
-      setRomsPath(romsDir);     setConfigRomsPath(romsDir);
-      saveCfg(mamePath, romsDir);
-      checkMame(mamePath);
-      scanRoms(romsDir);
+      if (romsDir) {
+        setRomsPath(romsDir); setConfigRomsPath(romsDir);
+        saveCfg(romsDir);
+        scanRoms(romsDir);
+      }
     });
     inputRef.current?.focus();
     const healthInterval = setInterval(() => { checkBackend(); }, 5000);
@@ -363,21 +350,14 @@ function Home() {
     return () => clearInterval(interval);
   }, [romsPath, backendStatus, scanRoms]);
 
-  // Detecta os dois emuladores (MAME 0.288 + MAMEPlus 0.168) automaticamente
+  // Detecta os dois emuladores embutidos (resolvidos no backend via env)
   useEffect(() => {
-    if (backendStatus !== "ok" || !mameExePath) return;
-    const qs = new URLSearchParams({ mamePath: mameExePath, mamePlusPath: mamePlusExePath || "" });
-    fetch(`${BACKEND}/api/emuladores?${qs.toString()}`)
+    if (backendStatus !== "ok") return;
+    fetch(`${BACKEND}/api/emuladores`)
       .then((r) => r.json())
-      .then((d) => {
-        setEmuStatus({ mame: !!d?.mame?.exists, mameplus: !!d?.mameplus?.exists });
-        if (d?.mameplus?.exists && !mamePlusExePath) {
-          setMamePlusExePath(d.mameplus.path);
-          setConfigMamePlusPath(d.mameplus.path);
-        }
-      })
+      .then((d) => setEmuStatus({ mame: !!d?.mame?.exists, mameplus: !!d?.mameplus?.exists }))
       .catch(() => { /* noop */ });
-  }, [backendStatus, mameExePath, mamePlusExePath]);
+  }, [backendStatus]);
 
   const pickEmulator = useCallback((e: "mame" | "mameplus") => {
     setSelectedEmulator(e);
@@ -395,15 +375,16 @@ function Home() {
   }, []);
 
   const handleLaunchGame = useCallback(async (romName: string) => {
-    if (!mameExePath) {
-      playSound(sndError);
-      setLaunchMsg("✗ Configure o caminho do MAME em ⚙ CONFIG (ESC)");
-      setTimeout(() => setLaunchMsg(""), 3000); return;
-    }
     if (backendStatus !== "ok") {
       playSound(sndError);
       setLaunchMsg("✗ Backend offline! Abra um terminal e rode: node mame-server.js");
       setTimeout(() => setLaunchMsg(""), 5000); return;
+    }
+    const emuOk = selectedEmulator === "mameplus" ? emuStatus.mameplus : emuStatus.mame;
+    if (!emuOk) {
+      playSound(sndError);
+      setLaunchMsg(`✗ ${selectedEmulator === "mameplus" ? "MAMEPlus" : "MAME"} não encontrado nos recursos do app`);
+      setTimeout(() => setLaunchMsg(""), 4000); return;
     }
     playSound(sndLaunch);
     setIsLaunching(true);
@@ -415,12 +396,9 @@ function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mamePath: mameExePath,
-          mamePlusPath: mamePlusExePath,
           emulator: selectedEmulator,
           romName,
           showMame: showMameWindow,
-          romPath: romsPath ? `${romsPath}\\${romName}` : undefined,
         }),
       });
       const data = await r.json();
@@ -435,7 +413,7 @@ function Home() {
       } else { playSound(sndError); setLaunchMsg(`✗ ${data.error}`); }
     } catch { playSound(sndError); setLaunchMsg("✗ Falha ao chamar o backend."); }
     finally { setTimeout(() => { setIsLaunching(false); setLaunchingRom(""); setTimeout(() => setLaunchMsg(""), 3000); }, 4000); }
-  }, [mameExePath, mamePlusExePath, selectedEmulator, backendStatus, romsPath, showMameWindow]);
+  }, [selectedEmulator, backendStatus, showMameWindow, emuStatus]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -482,35 +460,8 @@ function Home() {
     }
   }, [selectedIndex]);
 
-  const handleApplyMamePath = async () => {
-    if (!configMamePath.trim()) { setConfigMsg("✗ Informe o caminho do mame.exe"); return; }
-    setConfigMsg("⏳ Verificando...");
-    const alive = await checkBackend();
-    if (!alive) { setConfigMsg("✗ Backend offline! Rode: node mame-server.js"); return; }
-    const r = await fetch(`${BACKEND}/api/check-mame?path=${encodeURIComponent(configMamePath.trim())}`);
-    const data = await r.json();
-    if (data.exists) {
-      setMameExePath(configMamePath.trim());
-      setMameStatus("found");
-      if (data.currentRompath) {
-        setConfigRomsPath(data.currentRompath);
-        setRomsPath(data.currentRompath);
-        saveCfg(configMamePath.trim(), data.currentRompath);
-        setConfigMsg(`✓ MAME encontrado! rompath do mame.ini: ${data.currentRompath}`);
-        await scanRoms(data.currentRompath);
-      } else {
-        saveCfg(configMamePath.trim(), romsPath);
-        setConfigMsg("✓ MAME encontrado! Agora configure a pasta de ROMs.");
-      }
-    } else {
-      setMameStatus("not_found");
-      setConfigMsg(`✗ Arquivo não encontrado: ${data.path}`);
-    }
-  };
-
   const handleScanRoms = async () => {
     if (!configRomsPath.trim()) { setConfigMsg("✗ Informe a pasta de ROMs"); return; }
-    if (!mameExePath) { setConfigMsg("✗ Configure o MAME primeiro antes de escanear"); return; }
     setConfigMsg("⏳ Escaneando e salvando no mame.ini...");
     const alive = await checkBackend();
     if (!alive) { setConfigMsg("✗ Backend offline! Rode: node mame-server.js"); return; }
@@ -518,21 +469,22 @@ function Home() {
       const iniRes = await fetch(`${BACKEND}/api/set-rompath`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mamePath: mameExePath, romsPath: configRomsPath.trim() }),
+        body: JSON.stringify({ romsPath: configRomsPath.trim() }),
       });
       const iniData = await iniRes.json();
       if (!iniData.ok) { setConfigMsg(`✗ Erro ao salvar mame.ini: ${iniData.error}`); return; }
     } catch { setConfigMsg("✗ Falha ao salvar no mame.ini"); return; }
     setRomsPath(configRomsPath.trim());
-    saveCfg(mameExePath, configRomsPath.trim());
+    saveCfg(configRomsPath.trim());
     await scanRoms(configRomsPath.trim());
   };
 
   const historyRoms     = history.slice(0, 5).map((h) => h.rom);
   const selectedRom     = filteredRoms[selectedIndex];
   const isFavorite      = selectedRom && favorites.includes(selectedRom);
-  const mameStatusLabel = mameStatus === "checking" ? "⏳ VERIFICANDO" : mameStatus === "found" ? "✓ OK" : "✗ NÃO ENCONTRADO";
-  const mameStatusColor = mameStatus === "found" ? "text-neon-green" : mameStatus === "not_found" ? "text-red-400" : "text-neon-yellow";
+  const anyEmuOk        = emuStatus.mame || emuStatus.mameplus;
+  const mameStatusLabel = backendStatus === "checking" ? "⏳ VERIFICANDO" : anyEmuOk ? "✓ OK" : "✗ NÃO ENCONTRADO";
+  const mameStatusColor = anyEmuOk ? "text-neon-green" : backendStatus === "checking" ? "text-neon-yellow" : "text-red-400";
   const glass           = "bg-black/40 backdrop-blur-md border border-neon-cyan/20";
   const glassDark       = "bg-black/55 backdrop-blur-xl border border-neon-cyan/15";
 
