@@ -1,71 +1,69 @@
-# Atualização: Teclado completo + Upscale Python + Branding DEV EMERSON 2026
+# Plano: corrigir crash da página + embutir emuladores no .exe
 
-## 1. Correção silenciosa do erro de runtime
+## Parte 1 — Corrigir o erro "This page didn't load"
 
-O `index.tsx` importa `LazyLoadImage` como named export, mas o pacote é CommonJS e isso quebra a página no SSR. Trocar por import default:
-
+**Causa:** em `src/routes/index.tsx` linha 9-12, o import:
 ```ts
-import LazyLoad from "react-lazy-load-image-component";
-const { LazyLoadImage } = LazyLoad;
+import LazyLoadPkg from "react-lazy-load-image-component";
+const { LazyLoadImage } = LazyLoadPkg as ...;
 ```
+está retornando `undefined` no SSR/ESM, derrubando a página inteira com `Cannot destructure property 'LazyLoadImage' of 'LazyLoadPkg' as it is undefined`.
 
-## 2. Teclado completo (Soco / Chute / Tiro) para QUALQUER ROM
-
-Hoje o backend grava `cfg/default.cfg` com 6 botões P1 + 4 P2. Vou expandir para um mapeamento universal pensado para os 3 gêneros mais comuns — luta (Street Fighter/KOF/MK), beat'em up (Cadillacs, Final Fight) e shoot'em up (1942, Metal Slug). Como `default.cfg` é herdado por todas as ROMs e o app já apaga `*.cfg` por-rom, o mesmo mapeamento vale para QUALQUER jogo.
-
-Mapeamento P1 (teclado):
-
-```text
-Direção: Setas
-SOCO FRACO  (Button1) = A     (também vira "Tiro" em shmups)
-SOCO MÉDIO  (Button2) = S     (também vira "Bomba")
-SOCO FORTE  (Button3) = D     (também vira "Pulo/Especial")
-CHUTE FRACO (Button4) = Z
-CHUTE MÉDIO (Button5) = X
-CHUTE FORTE (Button6) = C
-Start = 1   Coin = 5    ESC = sair
+**Fix:** trocar pelo **named import** (que é o suportado pelo pacote em ESM):
+```ts
+import { LazyLoadImage } from "react-lazy-load-image-component";
 ```
+Remover o `LazyLoadPkg` e o destructure. Sem mudança no resto do JSX.
 
-Mapeamento P2:
+## Parte 2 — Tirar a busca do MAME no PC; embutir tudo
 
-```text
-Direção: R / F / D / G   (cima/baixo/esq/dir)
-Botões: Y U I H J K (1-6)
-Start = 2   Coin = 6
+### Backend (`mame-server.js`)
+- Resolver os binários **só** via env injetada pelo Electron, sem aceitar paths do frontend:
+  - `process.env.MGA_MAME_EXE` (fallback dev: `./resources/mame/mame.exe`)
+  - `process.env.MGA_MAMEPLUS_EXE` (fallback dev: `./resources/mameplus/mamep64.exe`)
+- `GET /api/emuladores` → sem query string; só retorna `{mame, mameplus}` com `exists` baseado nos paths fixos.
+- `POST /api/launch` → recebe só `{ emulator, romName, showMame }`. Sem `mamePath`/`mamePlusPath`.
+- `POST /api/set-rompath` e `POST /api/reset-controls` → usam o binário interno (sem `mamePath` no body).
+- `GET /api/check-mame` → **removido**.
+- ROM browse (`/api/browse`, `/api/roms`) → mantidos.
+
+### Frontend (`src/routes/index.tsx`)
+- **Remover** do painel de config: campos "caminho do mame.exe" e "caminho do mamep64.exe", botões SAVE associados, estados `configMamePath`/`mameExePath`/`configMamePlusPath`/`mamePlusExePath` e seu `localStorage`.
+- **Manter:** seletor MAME/MAMEPlus (●/○ via `/api/emuladores`), pasta de ROMs com browse+SAVE, aviso de romsets diferentes.
+- Launch envia só `{ emulator, romName, showMame }`.
+
+### Electron (`electron/main.cjs`)
+- Antes de spawnar `mame-server.js`, calcular e exportar:
+  ```js
+  const resBase = app.isPackaged ? process.resourcesPath : path.join(__dirname,'..','resources');
+  env.MGA_MAME_EXE     = path.join(resBase,'mame','mame.exe');
+  env.MGA_MAMEPLUS_EXE = path.join(resBase,'mameplus','mamep64.exe');
+  ```
+
+### Empacotamento (`package.json` → `build.extraResources`)
+Acrescentar:
+```json
+{ "from": "resources/mame",     "to": "mame" },
+{ "from": "resources/mameplus", "to": "mameplus" }
 ```
+Mantém `mame-server.js`, `intro.html`, `intro_bg.mp4` no `asarUnpack`/`extraResources` como já estão.
 
-No MAME `BUTTONn` é genérico — a mesma tecla `A` é "soco fraco" no SF e "tiro" no 1942, igual a um arcade real. A UI vai mostrar a legenda completa com tooltip explicando os dois nomes.
+### `build_exe.bat` + `electron/README.md`
+- O `.bat` ganha checagem inicial: se faltar `resources\mame\mame.exe` ou `resources\mameplus\mamep64.exe`, avisa e aborta.
+- README documenta: antes do build, copiar os emuladores para `resources/mame/` e `resources/mameplus/`. **Nenhum** caminho é configurado em runtime — só a pasta de ROMs.
 
-## 3. Automação Python para melhorar resolução/cores das imagens
+## Resultado para o usuário
+- Página volta a abrir (fim do erro do LazyLoad).
+- No painel de config sobra **só** o campo "Pasta de ROMs".
+- MAME e MAMEPlus já aparecem com ● verde porque vêm dentro do `.exe`.
+- `build_exe.bat` gera o instalador `release\MasterGamesArcade Setup x.y.z.exe` com os dois emuladores embutidos.
 
-Criar pasta `scripts/` com `upscale_assets.py` que:
+## Arquivos tocados
+- `src/routes/index.tsx` (fix import + remover UI de paths dos .exe)
+- `mame-server.js` (resolver via env, simplificar endpoints)
+- `electron/main.cjs` (injetar env com caminhos fixos)
+- `package.json` (extraResources com emuladores)
+- `build_exe.bat` (checagem pré-build)
+- `electron/README.md` (instruções atualizadas)
 
-1. Varre `src/assets/` e `public/assets/` (.png/.jpg/.webp).
-2. Para cada imagem:
-   - Upscale 2x com **Pillow + LANCZOS** (alta qualidade, sem modelo IA pesado).
-   - **ImageEnhance.Color** +15%, **Contrast** +10%, **Sharpness** +25% — valores baseados em práticas de fóruns retro-arcade (RetroArch CRT-Royale, Libretro, BYUU).
-   - `ImageOps.autocontrast` para reduzir banding.
-   - Salva como `_hd.png` ao lado do original (não destrutivo, idempotente).
-3. Gera `assets-manifest.json` com tamanhos antes/depois.
-
-Runner `scripts/upscale.sh` cuida de `pip install pillow` e da execução.
-
-Integração no app: helper `hdSrc()` tenta `_hd.png` primeiro e cai na original como fallback no `LazyLoadImage`.
-
-## 4. Branding "DEV EMERSON 2026"
-
-Adicionar a assinatura em:
-
-- Navbar à direita do logo: `// DEV EMERSON · 2026`
-- Rodapé da sidebar de jogos
-- Attract Mode (tela inativa): faixa inferior piscando `DEV EMERSON 2026`
-- Painel de Config: cabeçalho `MASTER GAMES ARCADE · DEV EMERSON 2026`
-- Telas 404 / Error: assinatura discreta no rodapé
-- `<title>` e meta `author` em `__root.tsx`
-
-## Detalhes técnicos
-
-- Editados: `src/routes/index.tsx`, `src/routes/__root.tsx`, `mame-server.js`.
-- Criados: `scripts/upscale_assets.py`, `scripts/upscale.sh`, `scripts/README.md`.
-- Sem novas dependências npm — Python (Pillow) fica isolado fora do bundle.
-- Mapeamento compatível com MAME 0.139+ (formato `<port>` / `<newseq>`).
+Aprova pra eu implementar?
