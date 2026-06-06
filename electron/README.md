@@ -49,24 +49,23 @@ O Electron vai abrir uma janela que:
   ícone, atalho de desktop, escolha de pasta de instalação).
 - `build_exe.bat` — Atalho para rodar tudo no Windows.
 
-## Embutir MAME e MAMEPlus no instalador
+## Emuladores embutidos (OBRIGATÓRIO antes do build)
 
-Coloque os emuladores em pastas dentro do projeto **antes** de rodar o build:
+Os dois emuladores são empacotados dentro do `.exe`. **Antes** de rodar
+`build_exe.bat`, copie-os para:
 
 ```
 resources/
-  mame/mame.exe            (MAME 0.288)
-  mameplus/mamep64.exe     (MAMEPlus 0.168 r5272 x64)
+  mame/mame.exe            (MAME 0.288 + arquivos auxiliares)
+  mameplus/mamep64.exe     (MAMEPlus 0.168 r5272 x64 + arquivos)
 ```
 
-E adicione ao bloco `"extraResources"` no `package.json`:
+O `package.json` já tem o `extraResources` para `resources/mame` e
+`resources/mameplus`. O `electron/main.cjs` injeta `MGA_MAME_EXE` e
+`MGA_MAMEPLUS_EXE` no `mame-server.js`, que resolve os binários sozinho.
 
-```json
-{ "from": "resources/mame", "to": "mame" },
-{ "from": "resources/mameplus", "to": "mameplus" }
-```
-
-Após instalar, o launcher detecta ambos via `/api/emuladores` automaticamente.
+**Em runtime o usuário NÃO configura caminho de emulador** — só a pasta
+de ROMs. Os dois aparecem automaticamente com ● verde no seletor.
 
 ## Tamanho do instalador
 
