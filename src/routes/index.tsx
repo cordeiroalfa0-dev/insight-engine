@@ -592,14 +592,8 @@ function Home() {
             </div>
           )}
           <div className="space-y-3 max-w-2xl">
-            <div className="space-y-1">
-              <label className="font-display text-[7px] text-neon-cyan block">CAMINHO DO MAME (.exe)</label>
-              <div className="flex gap-2">
-                <input type="text" placeholder="ex: C:\mame\mame.exe" value={configMamePath} onChange={(e) => setConfigMamePath(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleApplyMamePath()} className="flex-1 px-3 py-1.5 bg-black/40 border border-white/10 text-foreground font-body text-sm rounded focus:outline-none focus:border-neon-cyan/40" />
-                <button onClick={() => setBrowser("mame")} title="Procurar mame.exe" className="font-display text-[7px] border border-neon-magenta/40 text-neon-magenta px-3 py-1.5 rounded bg-neon-magenta/5 hover:bg-neon-magenta/15 transition"><FolderOpen size={9} className="inline mr-1" />PROCURAR</button>
-                <button onClick={handleApplyMamePath} className="font-display text-[7px] border border-neon-cyan/35 text-neon-cyan px-3 py-1.5 rounded bg-neon-cyan/5 hover:bg-neon-cyan/15 transition">VERIFICAR</button>
-              </div>
-              {mameExePath && <div className="font-body text-[10px] text-neon-green flex items-center gap-1"><CheckCircle size={9} /> {mameExePath}</div>}
+            <div className="px-3 py-2 rounded border border-neon-cyan/20 bg-neon-cyan/[0.04] font-body text-[10px] text-foreground/65 leading-snug">
+              <span className="text-neon-cyan font-display text-[8px]">ℹ EMULADORES EMBUTIDOS:</span> MAME 0.288 e MAMEPlus 0.168 vêm dentro do app — não é preciso configurar caminhos no PC. Você só precisa apontar a <span className="text-neon-yellow">PASTA DE ROMs</span>.
             </div>
             <div className="space-y-1">
               <label className="font-display text-[7px] text-neon-cyan block">PASTA DE ROMs</label>
@@ -623,7 +617,7 @@ function Home() {
                 </button>
                 <button
                   onClick={() => pickEmulator("mameplus")}
-                  disabled={!emuStatus.mameplus && !configMamePlusPath}
+                  disabled={!emuStatus.mameplus}
                   className={`font-display text-[8px] px-3 py-1.5 rounded border transition disabled:opacity-40 disabled:cursor-not-allowed ${selectedEmulator === "mameplus" ? "border-neon-magenta text-neon-magenta bg-neon-magenta/15" : "border-white/15 text-foreground/55 hover:text-neon-magenta"}`}
                 >
                   MAMEPlus 0.168 {emuStatus.mameplus ? "●" : "○"}
@@ -633,37 +627,6 @@ function Home() {
                     ? "ROMs do conjunto 0.288 (recente)."
                     : "ROMs do conjunto 0.168 — compatível com sets antigos (Mameplus 0.168 r5272 x64)."}
                 </span>
-              </div>
-              <div className="space-y-1">
-                <label className="font-display text-[7px] text-neon-cyan block">CAMINHO DO MAMEPlus (mamep64.exe)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="ex: C:\mame\mameplus\mamep64.exe"
-                    value={configMamePlusPath}
-                    onChange={(e) => setConfigMamePlusPath(e.target.value)}
-                    className="flex-1 px-3 py-1.5 bg-black/40 border border-white/10 text-foreground font-body text-sm rounded focus:outline-none focus:border-neon-magenta/40"
-                  />
-                  <button
-                    onClick={() => {
-                      const v = configMamePlusPath.trim();
-                      setMamePlusExePath(v);
-                      try {
-                        const prev = JSON.parse(localStorage.getItem(CFG_KEY) || "{}");
-                        localStorage.setItem(CFG_KEY, JSON.stringify({ ...prev, mamePlusPath: v }));
-                      } catch { /* noop */ }
-                      setConfigMsg(v ? "✓ Caminho MAMEPlus salvo" : "✗ Caminho MAMEPlus vazio");
-                    }}
-                    className="font-display text-[7px] border border-neon-magenta/35 text-neon-magenta px-3 py-1.5 rounded bg-neon-magenta/5 hover:bg-neon-magenta/15 transition"
-                  >
-                    SALVAR
-                  </button>
-                </div>
-                {mamePlusExePath && emuStatus.mameplus && (
-                  <div className="font-body text-[10px] text-neon-green flex items-center gap-1">
-                    <CheckCircle size={9} /> {mamePlusExePath}
-                  </div>
-                )}
               </div>
               <div className="font-body text-[10px] text-foreground/55 leading-snug">
                 ⚠ <span className="text-neon-yellow">Aviso de romset:</span> MAME 0.288 e MAMEPlus 0.168 usam <span className="text-neon-cyan">conjuntos de ROMs diferentes</span>. Mantenha pastas separadas e use o emulador correspondente ao set para ROMs limpas.
@@ -692,13 +655,12 @@ function Home() {
               <div className="flex flex-wrap gap-2 items-center">
                 <button
                   onClick={async () => {
-                    if (!mameExePath) { setConfigMsg("✗ Configure o MAME primeiro"); return; }
                     setConfigMsg("⏳ Aplicando teclado padrão...");
                     try {
                       const r = await fetch(`${BACKEND}/api/reset-controls`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ mamePath: mameExePath }),
+                        body: JSON.stringify({}),
                       });
                       const data = await r.json();
                       if (data.ok) setConfigMsg(`✓ Teclado configurado em todas as ROMs (${data.mappings} teclas)`);
