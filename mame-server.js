@@ -14,6 +14,24 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_FILE = path.join(__dirname, "config.json");
 const LOG_FILE = path.join(__dirname, "launches.log");
 
+// Emuladores embutidos. Em produção (Electron) os caminhos vêm via env
+// MGA_MAME_EXE / MGA_MAMEPLUS_EXE injetadas pelo main.cjs. Em dev usamos
+// resources/<emu>/ ao lado do projeto. Nada é descoberto no PC do usuário.
+function resolveEmu(envVar, relPath) {
+  const candidates = [];
+  if (process.env[envVar]) candidates.push(process.env[envVar]);
+  candidates.push(path.join(__dirname, "resources", ...relPath));
+  for (const c of candidates) {
+    try {
+      const abs = path.resolve(c);
+      if (fs.existsSync(abs) && fs.statSync(abs).isFile()) return abs;
+    } catch { /* noop */ }
+  }
+  return "";
+}
+function getMameExe()     { return resolveEmu("MGA_MAME_EXE",     ["mame", "mame.exe"]); }
+function getMamePlusExe() { return resolveEmu("MGA_MAMEPLUS_EXE", ["mameplus", "mamep64.exe"]); }
+
 function readConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")); } catch { return {}; }
 }
@@ -87,7 +105,7 @@ async function handleRequest(req, res) {
 
   // GET /api/health
   if (req.method === "GET" && url.pathname === "/api/health") {
-    json(res, 200, { ok: true, port: PORT, version: "v7.0", emulators: ["mame", "mameplus"] });
+    json(res, 200, { ok: true, port: PORT, version: "v8.0", emulators: ["mame", "mameplus"], bundled: true });
     return;
   }
 
@@ -179,59 +197,10 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // GET /api/check-mame?path=...
-  if (req.method === "GET" && url.pathname === "/api/check-mame") {
-    const mamePath = url.searchParams.get("path") || "";
-    if (!mamePath) { json(res, 400, { error: "Parâmetro 'path' obrigatório" }); return; }
-    const normalizedPath = path.resolve(mamePath.trim());
-    const exists = fs.existsSync(normalizedPath);
-    let currentRompath = "";
-    if (exists) {
-      const ini = readMameIni(path.dirname(normalizedPath));
-      currentRompath = ini["rompath"] || "";
-    }
-    json(res, 200, { exists, path: normalizedPath, currentRompath });
-    return;
-  }
-
-  // GET /api/emuladores?mamePath=...&mamePlusPath=...
-  // Detecta qual(is) emulador(es) estao disponiveis. Aceita caminhos diretos
-  // dos .exe OU uma pasta-base contendo subpastas mame/ e mameplus/.
+  // GET /api/emuladores — verifica os emuladores EMBUTIDOS no app (sem busca no PC)
   if (req.method === "GET" && url.pathname === "/api/emuladores") {
-    const mamePathParam = (url.searchParams.get("mamePath") || "").trim();
-    const mamePlusPathParam = (url.searchParams.get("mamePlusPath") || "").trim();
-    const basePathParam = (url.searchParams.get("base") || "").trim();
-
-    function tryResolve(candidates) {
-      for (const c of candidates) {
-        if (!c) continue;
-        try {
-          const abs = path.resolve(c);
-          if (fs.existsSync(abs) && fs.statSync(abs).isFile()) return abs;
-        } catch { /* noop */ }
-      }
-      return "";
-    }
-
-    const mameCandidates = [mamePathParam];
-    const mamePlusCandidates = [mamePlusPathParam];
-    if (basePathParam) {
-      const base = path.resolve(basePathParam);
-      mameCandidates.push(path.join(base, "mame", "mame.exe"));
-      mameCandidates.push(path.join(base, "mame.exe"));
-      mamePlusCandidates.push(path.join(base, "mameplus", "mamep64.exe"));
-      mamePlusCandidates.push(path.join(base, "mameplus", "mamep.exe"));
-      mamePlusCandidates.push(path.join(base, "mamep64.exe"));
-    }
-    if (mamePathParam) {
-      // Se passaram mamePath, tenta deduzir mameplus na pasta irma
-      const parent = path.dirname(path.dirname(path.resolve(mamePathParam)));
-      mamePlusCandidates.push(path.join(parent, "mameplus", "mamep64.exe"));
-      mamePlusCandidates.push(path.join(parent, "mameplus", "mamep.exe"));
-    }
-
-    const mameResolved = tryResolve(mameCandidates);
-    const mamePlusResolved = tryResolve(mamePlusCandidates);
+    const mameResolved = getMameExe();
+    const mamePlusResolved = getMamePlusExe();
     json(res, 200, {
       mame: { id: "mame", label: "MAME 0.288", path: mameResolved, exists: !!mameResolved },
       mameplus: { id: "mameplus", label: "MAMEPlus 0.168", path: mamePlusResolved, exists: !!mamePlusResolved },
@@ -243,10 +212,10 @@ async function handleRequest(req, res) {
   if (req.method === "POST" && url.pathname === "/api/set-rompath") {
     let body;
     try { body = await parseBody(req); } catch { json(res, 400, { error: "JSON inválido" }); return; }
-    const { mamePath, romsPath } = body;
-    if (!mamePath || !romsPath) { json(res, 400, { error: "mamePath e romsPath obrigatórios" }); return; }
-    const mameExe = path.resolve(mamePath.trim());
-    if (!fs.existsSync(mameExe)) { json(res, 404, { error: `MAME não encontrado: ${mameExe}` }); return; }
+    const { romsPath } = body;
+    if (!romsPath) { json(res, 400, { error: "romsPath obrigatório" }); return; }
+    const mameExe = getMameExe();
+    if (!mameExe) { json(res, 404, { error: "MAME embutido não encontrado nos recursos do app" }); return; }
     const mameDir = path.dirname(mameExe);
     const romsDir = path.resolve(romsPath.trim());
     const iniPath = path.join(mameDir, "mame.ini");
@@ -266,15 +235,12 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // POST /api/reset-controls  { mamePath }
+  // POST /api/reset-controls
   // Escreve cfg/default.cfg com mapeamento de TECLADO padrão para todas as ROMs.
   if (req.method === "POST" && url.pathname === "/api/reset-controls") {
-    let body;
-    try { body = await parseBody(req); } catch { json(res, 400, { error: "JSON inválido" }); return; }
-    const { mamePath } = body;
-    if (!mamePath) { json(res, 400, { error: "mamePath obrigatório" }); return; }
-    const mameExe = path.resolve(mamePath.trim());
-    if (!fs.existsSync(mameExe)) { json(res, 404, { error: `MAME não encontrado: ${mameExe}` }); return; }
+    try { await parseBody(req); } catch { /* body opcional */ }
+    const mameExe = getMameExe();
+    if (!mameExe) { json(res, 404, { error: "MAME embutido não encontrado nos recursos do app" }); return; }
     const mameDir = path.dirname(mameExe);
     const cfgDir = path.join(mameDir, "cfg");
     try {
@@ -343,19 +309,16 @@ ${ports}
     return;
   }
 
-  // POST /api/launch  { mamePath, mamePlusPath?, emulator?, romName, showMame? }
+  // POST /api/launch  { emulator?, romName, showMame? }
   if (req.method === "POST" && url.pathname === "/api/launch") {
     let body;
     try { body = await parseBody(req); } catch { json(res, 400, { error: "JSON inválido" }); return; }
-    const { mamePath, mamePlusPath, emulator, romName, showMame } = body;
-    if (!mamePath || !romName) { json(res, 400, { error: "mamePath e romName obrigatórios" }); return; }
+    const { emulator, romName, showMame } = body;
+    if (!romName) { json(res, 400, { error: "romName obrigatório" }); return; }
 
-    // Resolve qual binario usar conforme o emulador escolhido
-    const chosen = (emulator === "mameplus" && mamePlusPath)
-      ? mamePlusPath.trim()
-      : mamePath.trim();
-    const mameExe = path.resolve(chosen);
-    if (!fs.existsSync(mameExe)) {
+    // Resolve o binario embutido (sem ler caminhos do frontend)
+    const mameExe = emulator === "mameplus" ? getMamePlusExe() : getMameExe();
+    if (!mameExe) {
       json(res, 404, { error: `MAME não encontrado: ${mameExe}` }); return;
     }
 
