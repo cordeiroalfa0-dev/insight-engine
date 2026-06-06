@@ -6,10 +6,8 @@ import { useSpring, animated as animatedRaw } from "@react-spring/web";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const animated: any = animatedRaw;
 
-import LazyLoadPkg from "react-lazy-load-image-component";
+import { LazyLoadImage } from "react-lazy-load-image-component";
 import "react-lazy-load-image-component/src/effects/opacity.css";
-// Pacote é CommonJS — usar default + destructure evita o erro de named export no SSR.
-const { LazyLoadImage } = LazyLoadPkg as unknown as { LazyLoadImage: React.ComponentType<React.ImgHTMLAttributes<HTMLImageElement> & { effect?: string; threshold?: number; wrapperClassName?: string }> };
 import { Howl } from "howler";
 import localforage from "localforage";
 import { useDebounce } from "use-debounce";
