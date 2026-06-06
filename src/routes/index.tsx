@@ -699,10 +699,10 @@ function Home() {
           <span className="font-display text-[7px] text-red-300">Backend offline! Abra um terminal e rode: <span className="text-neon-yellow">node mame-server.js</span></span>
         </div>
       )}
-      {showMameInfo && backendStatus === "ok" && mameStatus === "not_found" && !showConfig && (
+      {showMameInfo && backendStatus === "ok" && !anyEmuOk && !showConfig && (
         <div className="fixed top-[46px] left-3 right-3 z-[38] rounded-b-md px-4 py-2 bg-yellow-900/25 border border-yellow-500/25 backdrop-blur-md flex items-center gap-2">
           <AlertTriangle size={11} className="text-yellow-400 flex-shrink-0" />
-          <span className="font-display text-[7px] text-yellow-300">MAME não configurado. Clique em CONFIG (ESC) para definir os caminhos.</span>
+          <span className="font-display text-[7px] text-yellow-300">Nenhum emulador detectado nos recursos do app.</span>
         </div>
       )}
 
@@ -810,7 +810,7 @@ function Home() {
               <>
                 <h1 className="font-display text-[13px] leading-tight text-neon-magenta mb-1">SELECIONE<br />SEU JOGO</h1>
                 <p className="font-body text-[11px] text-foreground/35 mb-2">
-                  {mameStatus === "found" ? `✓ MAME · ${romsList.length} jogos · ${favorites.length} favoritos` : mameStatus === "checking" ? "⏳ Verificando MAME..." : "⚠ MAME não configurado"}
+                  {anyEmuOk ? `✓ MAME · ${romsList.length} jogos · ${favorites.length} favoritos` : backendStatus === "checking" ? "⏳ Verificando MAME..." : "⚠ Nenhum emulador detectado"}
                 </p>
                 {showMameInfo && (
                   <div className="bg-black/30 border border-white/[0.05] rounded px-2 py-1.5">
@@ -942,21 +942,20 @@ function Home() {
       <footer className="fixed bottom-0 left-0 right-0 z-40">
         <div className={`px-4 py-1 flex items-center justify-between ${glass}`}>
           <div className="font-display text-[7px] text-foreground/25">© 2026 MASTER GAMES ARCADE · MAME LAUNCHER ULTIMATE · <span className="text-neon-magenta/60">DEV EMERSON 2026</span></div>
-          {showMameInfo && <span className={`font-display text-[7px] ${mameStatus === "found" ? "text-neon-green animate-blink" : "text-red-400"}`}>{mameStatus === "found" ? "● ONLINE" : "● MAME OFFLINE"}</span>}
+          {showMameInfo && <span className={`font-display text-[7px] ${anyEmuOk ? "text-neon-green animate-blink" : "text-red-400"}`}>{anyEmuOk ? "● ONLINE" : "● MAME OFFLINE"}</span>}
         </div>
         <div className="marquee-bar h-[2px] w-full" />
       </footer>
 
       <FolderBrowser
         open={browser !== null}
-        mode={browser === "mame" ? "exe" : "dir"}
-        title={browser === "mame" ? "PROCURAR MAME.EXE" : "PROCURAR PASTA DE ROMS"}
-        initialPath={browser === "mame" ? configMamePath : configRomsPath}
+        mode="dir"
+        title="PROCURAR PASTA DE ROMS"
+        initialPath={configRomsPath}
         backend={BACKEND}
         onClose={() => setBrowser(null)}
         onSelect={(p) => {
-          if (browser === "mame") setConfigMamePath(p);
-          else setConfigRomsPath(p);
+          setConfigRomsPath(p);
           setBrowser(null);
         }}
       />
