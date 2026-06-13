@@ -70,6 +70,16 @@ if errorlevel 1 goto :err
 REM ---------- [6/6] Empacotamento ----------
 echo.
 echo [6/6] Empacotando instalador NSIS x64 (electron-builder)...
+REM Mata mame-server se estiver rodando (libera 7777 e evita lock)
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":7777" ^| findstr "LISTENING"') do (
+  echo    Encerrando processo na porta 7777 (PID %%p)...
+  taskkill /PID %%p /F >nul 2>&1
+)
+REM Limpa release\ anterior para evitar instalador stale
+if exist "release" (
+  echo    Limpando release\ anterior...
+  rmdir /s /q "release" >nul 2>&1
+)
 call npm run electron:build
 if errorlevel 1 goto :err
 
