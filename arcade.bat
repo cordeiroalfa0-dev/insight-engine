@@ -24,25 +24,49 @@ for /f "tokens=*" %%v in ('node -v') do echo    Node %%v OK
 
 REM ---------- [2/6] Emuladores embutidos ----------
 echo.
-echo [2/6] Verificando emuladores embutidos...
-set MISSING=0
-if not exist "resources\mame\mame.exe" (
-  echo    [X] resources\mame\mame.exe NAO encontrado
-  set MISSING=1
-) else (
+echo [2/6] Verificando / baixando emuladores embutidos...
+if not exist "resources\mame"      mkdir "resources\mame"
+if not exist "resources\mameplus"  mkdir "resources\mameplus"
+if not exist "resources\tools"     mkdir "resources\tools"
+
+REM --- 7zr.exe portatil (necessario pra extrair SFX do MAME) ---
+if not exist "resources\tools\7z.exe" (
+  echo    Baixando 7-Zip portatil...
+  powershell -ExecutionPolicy Bypass -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://www.7-zip.org/a/7zr.exe' -OutFile 'resources\tools\7z.exe' -UseBasicParsing } catch { exit 1 }"
+  if not exist "resources\tools\7z.exe" (
+    echo    [ERRO] Falha ao baixar 7zr.exe. Verifique sua internet.
+    pause & exit /b 1
+  )
+)
+
+REM --- MAME 0.288 ---
+if exist "resources\mame\mame.exe" (
   echo    [OK] resources\mame\mame.exe
-)
-if not exist "resources\mameplus\mamep64.exe" (
-  echo    [X] resources\mameplus\mamep64.exe NAO encontrado
-  set MISSING=1
 ) else (
-  echo    [OK] resources\mameplus\mamep64.exe
+  echo    Baixando MAME 0.288 ^(~82 MB^)...
+  powershell -ExecutionPolicy Bypass -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/mamedev/mame/releases/download/mame0288/mame0288b_x64.exe' -OutFile 'resources\mame\_mame.exe' -UseBasicParsing } catch { exit 1 }"
+  if not exist "resources\mame\_mame.exe" (
+    echo    [ERRO] Falha ao baixar MAME 0.288.
+    pause & exit /b 1
+  )
+  echo    Extraindo MAME 0.288...
+  "resources\tools\7z.exe" x "resources\mame\_mame.exe" -o"resources\mame" -y >nul
+  del /q "resources\mame\_mame.exe" >nul 2>&1
+  if not exist "resources\mame\mame.exe" (
+    echo    [ERRO] mame.exe nao encontrado apos extracao.
+    pause & exit /b 1
+  )
+  echo    [OK] MAME 0.288 instalado
 )
-if "%MISSING%"=="1" (
-  echo.
-  echo ERRO: Coloque os emuladores nas pastas acima antes de continuar.
-  pause
-  exit /b 1
+
+REM --- MAMEPlus 64 ---
+if exist "resources\mameplus\mamep64.exe" (
+  echo    [OK] resources\mameplus\mamep64.exe
+) else (
+  echo    [AVISO] resources\mameplus\mamep64.exe NAO encontrado.
+  echo    Coloque o MAMEPlus 0.168 ^(mamep64.exe^) em resources\mameplus\ e rode de novo.
+  echo    ^(Nao temos URL publica estavel pra baixar automaticamente.^)
+  pause & exit /b 1
 )
 
 REM ---------- [3/6] Dependencias do app ----------

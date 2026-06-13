@@ -50,11 +50,52 @@
       },
       {
         "from": "resources/mame",
-        "to": "mame"
+        "to": "mame",
+        "filter": [
+          "**/*",
+          "!roms/**",
+          "!samples/**",
+          "!docs/**",
+          "!*.txt",
+          "!*.md",
+          "!chdman*.exe",
+          "!imgtool*.exe",
+          "!jedutil*.exe",
+          "!castool*.exe",
+          "!ldverify*.exe",
+          "!ldresample*.exe",
+          "!floptool*.exe",
+          "!nltool*.exe",
+          "!nlwav*.exe",
+          "!romcmp*.exe",
+          "!unidasm*.exe",
+          "!pmdcomp*.exe",
+          "!srcclean*.exe",
+          "!split*.exe",
+          "!7z*.exe"
+        ]
       },
       {
         "from": "resources/mameplus",
-        "to": "mameplus"
+        "to": "mameplus",
+        "filter": [
+          "**/*",
+          "!roms/**",
+          "!samples/**",
+          "!docs/**",
+          "!*.txt",
+          "!*.md",
+          "!chdman*.exe",
+          "!imgtool*.exe",
+          "!jedutil*.exe",
+          "!castool*.exe",
+          "!ldverify*.exe",
+          "!ldresample*.exe",
+          "!floptool*.exe",
+          "!romcmp*.exe",
+          "!unidasm*.exe",
+          "!7z*.exe"
+        ]
       }
     ],
     "win": {
