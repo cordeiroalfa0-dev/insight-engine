@@ -390,7 +390,7 @@ function Home() {
     setIsLaunching(true);
     setLaunchingRom(romName);
     setLaunchMsg(`⏳ Iniciando ${romName}...`);
-    await new Promise((resolve) => setTimeout(resolve, 4000));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     try {
       const r = await fetch(`${BACKEND}/api/launch`, {
         method: "POST",
@@ -412,7 +412,7 @@ function Home() {
         });
       } else { playSound(sndError); setLaunchMsg(`✗ ${data.error}`); }
     } catch { playSound(sndError); setLaunchMsg("✗ Falha ao chamar o backend."); }
-    finally { setTimeout(() => { setIsLaunching(false); setLaunchingRom(""); setTimeout(() => setLaunchMsg(""), 3000); }, 4000); }
+    finally { setTimeout(() => { setIsLaunching(false); setLaunchingRom(""); setTimeout(() => setLaunchMsg(""), 3000); }, 1500); }
   }, [selectedEmulator, backendStatus, showMameWindow, emuStatus]);
 
   useEffect(() => {
@@ -488,8 +488,14 @@ function Home() {
   const glass           = "bg-black/40 backdrop-blur-md border border-neon-cyan/20";
   const glassDark       = "bg-black/55 backdrop-blur-xl border border-neon-cyan/15";
 
-  // ── Virtualizer para a grade do modo expandido ──
-  const COLS = Math.max(2, Math.floor(((typeof window !== "undefined" ? window.innerWidth : 1200) - 48) / 160));
+  // ── Virtualizer para a grade do modo expandido (recalcula no resize) ──
+  const [winW, setWinW] = useState<number>(typeof window !== "undefined" ? window.innerWidth : 1200);
+  useEffect(() => {
+    const onResize = () => setWinW(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const COLS = Math.max(2, Math.floor((winW - 48) / 160));
   const rowCount = Math.ceil(filteredRoms.length / COLS);
   const gridVirtualizer = useVirtualizer({
     count: rowCount,
@@ -551,7 +557,7 @@ function Home() {
         </div>
       )}
 
-      <div className="fixed inset-0 bg-no-repeat" style={{ backgroundImage: "url('/assets/background.png')", backgroundSize: "contain", backgroundPosition: "left center", backgroundAttachment: "fixed", backgroundColor: "#000" }} />
+      <div className="fixed inset-0 bg-no-repeat" style={{ backgroundImage: "url('/assets/background.png')", backgroundSize: "cover", backgroundPosition: "center center", backgroundAttachment: "fixed", backgroundColor: "#000" }} />
       <div className="fixed inset-0 scanlines pointer-events-none z-0" />
       <div className="scanline-sweep fixed" />
       <div className="marquee-bar h-[2px] w-full fixed top-0 left-0 z-50" />
