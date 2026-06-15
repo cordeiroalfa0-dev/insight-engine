@@ -3,6 +3,8 @@
 // then opens a BrowserWindow no app.
 
 const { app, BrowserWindow, shell, Menu } = require("electron");
+// Permite autoplay de video com som (a intro tem audio).
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
