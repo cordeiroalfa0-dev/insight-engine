@@ -286,9 +286,14 @@
 <body>
 
 <!-- VÍDEO DE FUNDO -->
-<video id="bgVideo" autoplay muted loop playsinline>
+<video id="bgVideo" autoplay muted loop playsinline preload="auto">
   <source src="intro_bg.mp4" type="video/mp4">
 </video>
+
+<!-- AVISO DE SOM (auto-some no 1o clique/tecla) -->
+<div id="soundHint" style="position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:30;font-family:'Press Start 2P',monospace;font-size:9px;color:#00e5ff;letter-spacing:3px;background:rgba(0,0,0,0.6);padding:8px 14px;border:1px solid rgba(0,229,255,0.5);border-radius:3px;box-shadow:0 0 20px rgba(0,229,255,0.4);animation:pulse 1.5s ease infinite;">
+  ♪ CLIQUE OU TECLE PARA ATIVAR O SOM ♪
+</div>
 
 <!-- CAMADAS -->
 <div class="layer-dark"></div>
@@ -373,6 +378,7 @@
 
   // ENTRAR NO LAUNCHER
   function enterLauncher() {
+    try { document.getElementById('bgVideo').muted = false; } catch (e) {}
     const overlay = document.getElementById('exitOverlay');
     overlay.classList.add('active');
     setTimeout(() => {
@@ -380,12 +386,31 @@
     }, 700);
   }
 
-  // QUALQUER TECLA ENTRA
+  // PRIMEIRA INTERACAO -> LIGA O SOM
+  function unlockAudio() {
+    const v = document.getElementById('bgVideo');
+    if (v) {
+      v.muted = false;
+      v.volume = 1.0;
+      v.play().catch(() => {});
+    }
+    const hint = document.getElementById('soundHint');
+    if (hint) hint.style.display = 'none';
+    window.removeEventListener('click', unlockAudio);
+    window.removeEventListener('keydown', firstKey);
+    window.removeEventListener('touchstart', unlockAudio);
+  }
+  window.addEventListener('click', unlockAudio, { once: true });
+  window.addEventListener('touchstart', unlockAudio, { once: true });
+
+  // QUALQUER TECLA ENTRA (depois de 4s)
   let canEnter = false;
   setTimeout(() => { canEnter = true; }, 4000);
-  document.addEventListener('keydown', () => {
+  function firstKey() {
+    unlockAudio();
     if (canEnter) enterLauncher();
-  });
+  }
+  window.addEventListener('keydown', firstKey);
 
   // CURSOR PERSONALIZADO
   const cursor = document.createElement('div');
