@@ -115,13 +115,20 @@ async function createWindow() {
     await mainWindow.loadFile(introPath);
   }
 
-  // Aguarda Vite + mame-server, depois carrega o launcher
+  // Os servicos (mame-server + Vite) iniciam em background,
+  // mas NAO forcam transicao — o usuario clica "INSERIR FICHA" na intro.
+  // So aguardamos silenciosamente para garantir que estejam prontos.
+  try {
+    await waitForPort(MAME_PORT, 60000);
+    log("mame-server pronto na porta", MAME_PORT);
+  } catch (err) {
+    log("mame-server nao respondeu:", err.message);
+  }
   try {
     await waitForPort(APP_PORT, 60000);
-    log("Vite pronto. Carregando launcher...");
-    await mainWindow.loadURL(`http://localhost:${APP_PORT}/?launcher=1`);
+    log("Vite pronto na porta", APP_PORT);
   } catch (err) {
-    log("Falha esperando Vite:", err.message);
+    log("Vite nao respondeu:", err.message);
   }
 }
 
