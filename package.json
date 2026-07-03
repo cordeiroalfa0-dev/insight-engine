@@ -192,7 +192,7 @@
   "devDependencies": {
     "@electron/packager": "^20.0.1",
     "@eslint/js": "^9.32.0",
-    "@lovable.dev/vite-tanstack-config": "2.3.2",
+    "@lovable.dev/vite-tanstack-config": "2.7.0",
     "@types/howler": "^2.2.12",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
