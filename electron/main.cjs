@@ -11,19 +11,33 @@ const fs = require("fs");
 const http = require("http");
 
 const isDev = !app.isPackaged;
-const ROOT = isDev ? path.join(__dirname, "..") : process.resourcesPath;
+const APP_ROOT = isDev ? path.join(__dirname, "..") : app.getAppPath();
+const RESOURCE_ROOT = isDev ? path.join(APP_ROOT, "resources") : process.resourcesPath;
 const APP_PORT = 8080;
 const MAME_PORT = 7777;
 
 // Caminhos fixos dos emuladores embutidos no instalador.
-// Em produção: <resources>/mame|mameplus. Em dev: <repo>/resources/...
-const RES_BASE = app.isPackaged ? process.resourcesPath : path.join(__dirname, "..", "resources");
-const MAME_EXE     = path.join(RES_BASE, "mame", "mame.exe");
-const MAMEPLUS_EXE = path.join(RES_BASE, "mameplus", "mamep64.exe");
+// Em produção: tenta <resources>/mame|mameplus e <resources>/app/resources/...
+// Em dev: <repo>/resources/...
+function firstExistingPath(candidates) {
+  for (const candidate of candidates) {
+    try { if (fs.existsSync(candidate)) return candidate; } catch { /* noop */ }
+  }
+  return candidates[0];
+}
+const MAME_EXE = firstExistingPath([
+  path.join(RESOURCE_ROOT, "mame", "mame.exe"),
+  path.join(APP_ROOT, "resources", "mame", "mame.exe"),
+]);
+const MAMEPLUS_EXE = firstExistingPath([
+  path.join(RESOURCE_ROOT, "mameplus", "mamep64.exe"),
+  path.join(APP_ROOT, "resources", "mameplus", "mamep64.exe"),
+]);
 
 let mainWindow = null;
 let mameServerProc = null;
 let viteProc = null;
+let staticServer = null;
 
 function log(...args) {
   console.log("[MGA]", ...args);
@@ -49,7 +63,10 @@ function waitForPort(port, timeoutMs = 30000) {
 }
 
 function spawnMameServer() {
-  const serverPath = path.join(ROOT, "mame-server.js");
+  const serverPath = firstExistingPath(isDev
+    ? [path.join(APP_ROOT, "mame-server.js"), path.join(RESOURCE_ROOT, "mame-server.js")]
+    : [path.join(RESOURCE_ROOT, "mame-server.js"), path.join(APP_ROOT, "mame-server.js")]
+  );
   if (!fs.existsSync(serverPath)) {
     log("mame-server.js não encontrado em", serverPath);
     return;
@@ -59,7 +76,7 @@ function spawnMameServer() {
   // Injeta MGA_MAME_EXE / MGA_MAMEPLUS_EXE para o backend resolver os binarios
   // sem precisar consultar o usuario.
   mameServerProc = spawn(process.execPath, [serverPath], {
-    cwd: ROOT,
+    cwd: path.dirname(serverPath),
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: "1",
@@ -71,14 +88,73 @@ function spawnMameServer() {
   mameServerProc.on("exit", (code) => log("mame-server saiu com código", code));
 }
 
+function serveStaticFile(res, filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const types = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".mp4": "video/mp4",
+    ".woff2": "font/woff2",
+  };
+  res.writeHead(200, { "Content-Type": types[ext] || "application/octet-stream" });
+  fs.createReadStream(filePath)
+    .on("error", () => {
+      try { res.end(); } catch { /* noop */ }
+    })
+    .pipe(res);
+}
+
+function startStaticServer() {
+  const distDir = firstExistingPath([
+    path.join(APP_ROOT, "dist", "client"),
+    path.join(APP_ROOT, "dist"),
+  ]);
+  const publicDir = path.join(APP_ROOT, "public");
+  const introDir = APP_ROOT;
+
+  staticServer = http.createServer((req, res) => {
+    const url = new URL(req.url || "/", `http://127.0.0.1:${APP_PORT}`);
+    let pathname = decodeURIComponent(url.pathname);
+    if (pathname === "/") pathname = "/index.html";
+
+    const candidates = [];
+    if (pathname === "/intro.html") candidates.push(path.join(introDir, "intro.html"));
+    candidates.push(path.join(distDir, pathname));
+    candidates.push(path.join(publicDir, pathname.replace(/^\//, "")));
+    candidates.push(path.join(distDir, "index.html"));
+
+    const filePath = candidates.find((candidate) => {
+      try { return fs.existsSync(candidate) && fs.statSync(candidate).isFile(); } catch { return false; }
+    });
+
+    if (!filePath) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Arquivo não encontrado");
+      return;
+    }
+    serveStaticFile(res, filePath);
+  });
+  staticServer.listen(APP_PORT, "127.0.0.1", () => log("Servidor do app pronto na porta", APP_PORT));
+  staticServer.on("error", (err) => log("Servidor do app erro:", err.message));
+}
+
 function spawnVite() {
-  // Em produção, servimos os arquivos buildados via Vite preview.
-  // Em dev, rodamos vite dev.
+  if (!isDev) {
+    startStaticServer();
+    return;
+  }
   const cmd = process.platform === "win32" ? "npx.cmd" : "npx";
-  const args = isDev ? ["vite", "dev", "--port", String(APP_PORT)] : ["vite", "preview", "--port", String(APP_PORT)];
+  const args = ["vite", "dev", "--port", String(APP_PORT)];
   log("Iniciando Vite:", cmd, args.join(" "));
   viteProc = spawn(cmd, args, {
-    cwd: ROOT,
+    cwd: APP_ROOT,
     env: { ...process.env },
     stdio: "inherit",
     shell: process.platform === "win32",
@@ -93,7 +169,7 @@ async function createWindow() {
     backgroundColor: "#000000",
     autoHideMenuBar: true,
     fullscreenable: true,
-    icon: path.join(ROOT, "public", "favicon.ico"),
+    icon: path.join(APP_ROOT, "public", "favicon.ico"),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -110,7 +186,10 @@ async function createWindow() {
   });
 
   // Splash: carrega intro.html local imediatamente
-  const introPath = path.join(ROOT, "intro.html");
+  const introPath = firstExistingPath([
+    path.join(APP_ROOT, "intro.html"),
+    path.join(RESOURCE_ROOT, "intro.html"),
+  ]);
   if (fs.existsSync(introPath)) {
     await mainWindow.loadFile(introPath);
   }
@@ -149,4 +228,5 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   try { if (mameServerProc) mameServerProc.kill(); } catch { /* noop */ }
   try { if (viteProc) viteProc.kill(); } catch { /* noop */ }
+  try { if (staticServer) staticServer.close(); } catch { /* noop */ }
 });
