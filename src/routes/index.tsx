@@ -6,13 +6,22 @@ import { useSpring, animated as animatedRaw } from "@react-spring/web";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const animated: any = animatedRaw;
 
-import { LazyLoadImage } from "react-lazy-load-image-component";
+import LazyLoadPkg from "react-lazy-load-image-component";
 import "react-lazy-load-image-component/src/effects/opacity.css";
 import { Howl } from "howler";
 import localforage from "localforage";
 import { useDebounce } from "use-debounce";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { FolderBrowser } from "@/components/FolderBrowser";
+
+const { LazyLoadImage } = LazyLoadPkg as unknown as { LazyLoadImage: React.ComponentType<{
+  src: string;
+  alt: string;
+  effect?: string;
+  threshold?: number;
+  wrapperClassName?: string;
+  className?: string;
+}> };
 
 // ─── Howler sons arcade (import ES, sem CDN) ──────────────────────────────────
 let soundsReady = false;

@@ -371,7 +371,8 @@
     const overlay = document.getElementById('exitOverlay');
     overlay.classList.add('active');
     setTimeout(() => {
-      window.location.href = 'http://localhost:8080';
+      try { sessionStorage.setItem('mga.introSeen','1'); } catch(e){}
+      window.location.href = 'http://localhost:8080/?launcher=1';
     }, 700);
   }
 
