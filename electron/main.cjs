@@ -166,6 +166,42 @@ function startStaticServer() {
     ...publicDirs.map((dir) => path.join(dir, "intro.html")),
   ];
 
+  function getClientDistDir() {
+    return distDirs.find((dir) => {
+      try { return fs.existsSync(path.join(dir, "assets")); } catch { return false; }
+    }) || distDirs[0];
+  }
+
+  function getAssetFiles(ext) {
+    const assetsDir = path.join(getClientDistDir(), "assets");
+    try {
+      return fs.readdirSync(assetsDir)
+        .filter((file) => file.toLowerCase().endsWith(ext))
+        .sort();
+    } catch { return []; }
+  }
+
+  function getEntryScript() {
+    const assetsDir = path.join(getClientDistDir(), "assets");
+    for (const file of getAssetFiles(".js")) {
+      try {
+        const content = fs.readFileSync(path.join(assetsDir, file), "utf8");
+        if (content.includes("hydrateRoot(document")) return file;
+      } catch { /* noop */ }
+    }
+    return getAssetFiles(".js")[0] || "";
+  }
+
+  function renderAppShell(res) {
+    const entry = getEntryScript();
+    if (!entry) return renderMissingApp(res);
+    const cssLinks = getAssetFiles(".css")
+      .map((file) => `<link rel="stylesheet" href="/assets/${file}">`)
+      .join("");
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Master Games Arcade</title>${cssLinks}</head><body><script type="module" src="/assets/${entry}"></script></body></html>`);
+  }
+
   function safeFile(root, pathname) {
     const relative = pathname.replace(/^\/+/, "");
     const candidate = path.normalize(path.join(root, relative));
@@ -193,7 +229,7 @@ function startStaticServer() {
     const filePath = firstExistingFile(candidates.filter(Boolean));
 
     if (!filePath) {
-      renderMissingApp(res);
+      renderAppShell(res);
       return;
     }
     serveStaticFile(res, filePath);
