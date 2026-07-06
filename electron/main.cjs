@@ -19,19 +19,49 @@ const MAME_PORT = 7777;
 // Caminhos fixos dos emuladores embutidos no instalador.
 // Em produção: tenta <resources>/mame|mameplus e <resources>/app/resources/...
 // Em dev: <repo>/resources/...
+function uniqueExistingRoots(roots) {
+  const seen = new Set();
+  return roots.filter((root) => {
+    if (!root || seen.has(root)) return false;
+    seen.add(root);
+    try { return fs.existsSync(root); } catch { return false; }
+  });
+}
+
+const APP_ROOTS = uniqueExistingRoots([
+  APP_ROOT,
+  path.join(RESOURCE_ROOT, "app"),
+  RESOURCE_ROOT,
+  path.dirname(process.execPath),
+]);
+
 function firstExistingPath(candidates) {
   for (const candidate of candidates) {
     try { if (fs.existsSync(candidate)) return candidate; } catch { /* noop */ }
   }
   return candidates[0];
 }
+
+function firstExistingFile(candidates) {
+  for (const candidate of candidates) {
+    try { if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate; } catch { /* noop */ }
+  }
+  return "";
+}
+
+function fromRoots(segments, roots = APP_ROOTS) {
+  return roots.map((root) => path.join(root, ...segments));
+}
+
 const MAME_EXE = firstExistingPath([
   path.join(RESOURCE_ROOT, "mame", "mame.exe"),
   path.join(APP_ROOT, "resources", "mame", "mame.exe"),
+  ...fromRoots(["resources", "mame", "mame.exe"]),
 ]);
 const MAMEPLUS_EXE = firstExistingPath([
   path.join(RESOURCE_ROOT, "mameplus", "mamep64.exe"),
   path.join(APP_ROOT, "resources", "mameplus", "mamep64.exe"),
+  ...fromRoots(["resources", "mameplus", "mamep64.exe"]),
 ]);
 
 let mainWindow = null;
@@ -63,25 +93,42 @@ function waitForPort(port, timeoutMs = 30000) {
 }
 
 function spawnMameServer() {
-  const serverPath = firstExistingPath(isDev
-    ? [path.join(APP_ROOT, "mame-server.js"), path.join(RESOURCE_ROOT, "mame-server.js")]
-    : [path.join(RESOURCE_ROOT, "mame-server.js"), path.join(APP_ROOT, "mame-server.js")]
-  );
+  const serverPath = firstExistingFile([
+    path.join(APP_ROOT, "mame-server.js"),
+    path.join(RESOURCE_ROOT, "app", "mame-server.js"),
+    path.join(RESOURCE_ROOT, "mame-server.js"),
+    ...fromRoots(["mame-server.js"]),
+  ]);
   if (!fs.existsSync(serverPath)) {
     log("mame-server.js não encontrado em", serverPath);
     return;
+  }
+  let runnableServerPath = serverPath;
+  // Se o arquivo estiver fora da pasta que contém package.json com type=module
+  // (ex.: extraResources), o Node trataria .js como CommonJS e quebraria no import.
+  // Copiamos como .mjs para garantir execução ESM em qualquer instalador.
+  if (!serverPath.includes("app.asar") && path.extname(serverPath).toLowerCase() === ".js") {
+    try {
+      const tempDir = path.join(app.getPath("userData"), "runtime");
+      fs.mkdirSync(tempDir, { recursive: true });
+      runnableServerPath = path.join(tempDir, "mame-server.mjs");
+      fs.copyFileSync(serverPath, runnableServerPath);
+    } catch (err) {
+      log("Falha ao preparar mame-server.mjs:", err.message);
+    }
   }
   log("Iniciando mame-server.js...");
   // Usa o node embutido no Electron (process.execPath) com ELECTRON_RUN_AS_NODE=1.
   // Injeta MGA_MAME_EXE / MGA_MAMEPLUS_EXE para o backend resolver os binarios
   // sem precisar consultar o usuario.
-  mameServerProc = spawn(process.execPath, [serverPath], {
-    cwd: path.dirname(serverPath),
+  mameServerProc = spawn(process.execPath, [runnableServerPath], {
+    cwd: path.dirname(runnableServerPath),
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: "1",
       MGA_MAME_EXE: MAME_EXE,
       MGA_MAMEPLUS_EXE: MAMEPLUS_EXE,
+      MGA_USER_DATA_DIR: app.getPath("userData"),
     },
     stdio: "inherit",
   });
@@ -112,12 +159,61 @@ function serveStaticFile(res, filePath) {
 }
 
 function startStaticServer() {
-  const distDir = firstExistingPath([
-    path.join(APP_ROOT, "dist", "client"),
-    path.join(APP_ROOT, "dist"),
-  ]);
-  const publicDir = path.join(APP_ROOT, "public");
-  const introDir = APP_ROOT;
+  const distDirs = APP_ROOTS.flatMap((root) => [path.join(root, "dist", "client"), path.join(root, "dist")]);
+  const publicDirs = APP_ROOTS.map((root) => path.join(root, "public"));
+  const introFiles = [
+    ...fromRoots(["intro.html"]),
+    ...publicDirs.map((dir) => path.join(dir, "intro.html")),
+  ];
+
+  function getClientDistDir() {
+    return distDirs.find((dir) => {
+      try { return fs.existsSync(path.join(dir, "assets")); } catch { return false; }
+    }) || distDirs[0];
+  }
+
+  function getAssetFiles(ext) {
+    const assetsDir = path.join(getClientDistDir(), "assets");
+    try {
+      return fs.readdirSync(assetsDir)
+        .filter((file) => file.toLowerCase().endsWith(ext))
+        .sort();
+    } catch { return []; }
+  }
+
+  function getEntryScript() {
+    const assetsDir = path.join(getClientDistDir(), "assets");
+    for (const file of getAssetFiles(".js")) {
+      try {
+        const content = fs.readFileSync(path.join(assetsDir, file), "utf8");
+        if (content.includes("hydrateRoot(document")) return file;
+      } catch { /* noop */ }
+    }
+    return getAssetFiles(".js")[0] || "";
+  }
+
+  function renderAppShell(res) {
+    const entry = getEntryScript();
+    if (!entry) return renderMissingApp(res);
+    const cssLinks = getAssetFiles(".css")
+      .map((file) => `<link rel="stylesheet" href="/assets/${file}">`)
+      .join("");
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Master Games Arcade</title>${cssLinks}</head><body><script type="module" src="/assets/${entry}"></script></body></html>`);
+  }
+
+  function safeFile(root, pathname) {
+    const relative = pathname.replace(/^\/+/, "");
+    const candidate = path.normalize(path.join(root, relative));
+    const rootNormalized = path.normalize(root);
+    if (!candidate.startsWith(rootNormalized)) return "";
+    try { return fs.existsSync(candidate) && fs.statSync(candidate).isFile() ? candidate : ""; } catch { return ""; }
+  }
+
+  function renderMissingApp(res) {
+    res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Master Games Arcade</title><style>body{margin:0;background:#000;color:#00e5ff;font:18px monospace;display:grid;place-items:center;height:100vh}main{max-width:760px;padding:32px;text-align:center}b{color:#fff}</style></head><body><main><b>Master Games Arcade</b><br><br>Instalação incompleta: arquivos do launcher não foram encontrados.<br>Reinstale usando o instalador completo atualizado.</main></body></html>`);
+  }
 
   staticServer = http.createServer((req, res) => {
     const url = new URL(req.url || "/", `http://127.0.0.1:${APP_PORT}`);
@@ -125,18 +221,15 @@ function startStaticServer() {
     if (pathname === "/") pathname = "/index.html";
 
     const candidates = [];
-    if (pathname === "/intro.html") candidates.push(path.join(introDir, "intro.html"));
-    candidates.push(path.join(distDir, pathname));
-    candidates.push(path.join(publicDir, pathname.replace(/^\//, "")));
-    candidates.push(path.join(distDir, "index.html"));
+    if (pathname === "/intro.html") candidates.push(...introFiles);
+    for (const dir of distDirs) candidates.push(safeFile(dir, pathname));
+    for (const dir of publicDirs) candidates.push(safeFile(dir, pathname));
+    for (const dir of distDirs) candidates.push(path.join(dir, "index.html"));
 
-    const filePath = candidates.find((candidate) => {
-      try { return fs.existsSync(candidate) && fs.statSync(candidate).isFile(); } catch { return false; }
-    });
+    const filePath = firstExistingFile(candidates.filter(Boolean));
 
     if (!filePath) {
-      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Arquivo não encontrado");
+      renderAppShell(res);
       return;
     }
     serveStaticFile(res, filePath);
@@ -163,13 +256,17 @@ function spawnVite() {
 }
 
 async function createWindow() {
+  const iconPath = firstExistingFile([
+    ...fromRoots(["public", "favicon.ico"]),
+    path.join(RESOURCE_ROOT, "app.ico"),
+  ]);
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     backgroundColor: "#000000",
     autoHideMenuBar: true,
     fullscreenable: true,
-    icon: path.join(APP_ROOT, "public", "favicon.ico"),
+    icon: iconPath || path.join(APP_ROOT, "public", "favicon.ico"),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -186,12 +283,14 @@ async function createWindow() {
   });
 
   // Splash: carrega intro.html local imediatamente
-  const introPath = firstExistingPath([
-    path.join(APP_ROOT, "intro.html"),
-    path.join(RESOURCE_ROOT, "intro.html"),
+  const introPath = firstExistingFile([
+    ...fromRoots(["intro.html"]),
+    ...fromRoots(["public", "intro.html"]),
   ]);
   if (fs.existsSync(introPath)) {
     await mainWindow.loadFile(introPath);
+  } else {
+    await mainWindow.loadURL(`http://127.0.0.1:${APP_PORT}/intro.html`);
   }
 
   // Os servicos (mame-server + Vite) iniciam em background,
