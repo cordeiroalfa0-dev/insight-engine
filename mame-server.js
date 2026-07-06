@@ -11,8 +11,10 @@ import { fileURLToPath } from "url";
 
 const PORT = 7777;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CONFIG_FILE = path.join(__dirname, "config.json");
-const LOG_FILE = path.join(__dirname, "launches.log");
+const DATA_DIR = process.env.MGA_USER_DATA_DIR || __dirname;
+try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* noop */ }
+const CONFIG_FILE = path.join(DATA_DIR, "config.json");
+const LOG_FILE = path.join(DATA_DIR, "launches.log");
 
 // Emuladores embutidos. Em produção (Electron) os caminhos vêm via env
 // MGA_MAME_EXE / MGA_MAMEPLUS_EXE injetadas pelo main.cjs. Em dev usamos
