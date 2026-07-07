@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "asset_id": "946f2aea-a2d5-4356-8615-129db77aa906",
+  "asset_id": "33c39e20-1e40-4065-b40a-f7ce7ca07054",
   "project_id": "a10c0705-eaea-4645-813a-a754b43cf119",
-  "url": "/__l5e/assets-v1/946f2aea-a2d5-4356-8615-129db77aa906/MasterGamesArcade-Setup-FBNeo.exe",
-  "r2_key": "a/v1/a10c0705-eaea-4645-813a-a754b43cf119/946f2aea-a2d5-4356-8615-129db77aa906/MasterGamesArcade-Setup-FBNeo.exe",
-  "original_filename": "MasterGamesArcade-Setup-FBNeo.exe",
-  "size": 113705976,
+  "url": "/__l5e/assets-v1/33c39e20-1e40-4065-b40a-f7ce7ca07054/MasterGamesArcade-Setup-FBNeo-v2.exe",
+  "r2_key": "a/v1/a10c0705-eaea-4645-813a-a754b43cf119/33c39e20-1e40-4065-b40a-f7ce7ca07054/MasterGamesArcade-Setup-FBNeo-v2.exe",
+  "original_filename": "MasterGamesArcade-Setup-FBNeo-v2.exe",
+  "size": 113706769,
   "content_type": "application/octet-stream",
-  "created_at": "2026-07-07T01:26:40Z"
+  "created_at": "2026-07-07T01:34:31Z"
 }
