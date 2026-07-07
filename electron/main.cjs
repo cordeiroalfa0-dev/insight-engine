@@ -53,16 +53,14 @@ function fromRoots(segments, roots = APP_ROOTS) {
   return roots.map((root) => path.join(root, ...segments));
 }
 
-const MAME_EXE = firstExistingPath([
-  path.join(RESOURCE_ROOT, "mame", "mame.exe"),
-  path.join(APP_ROOT, "resources", "mame", "mame.exe"),
-  ...fromRoots(["resources", "mame", "mame.exe"]),
+const FBNEO_EXE = firstExistingPath([
+  path.join(RESOURCE_ROOT, "fbneo", "fbneo64.exe"),
+  path.join(APP_ROOT, "resources", "fbneo", "fbneo64.exe"),
+  ...fromRoots(["resources", "fbneo", "fbneo64.exe"]),
 ]);
-const MAMEPLUS_EXE = firstExistingPath([
-  path.join(RESOURCE_ROOT, "mameplus", "mamep64.exe"),
-  path.join(APP_ROOT, "resources", "mameplus", "mamep64.exe"),
-  ...fromRoots(["resources", "mameplus", "mamep64.exe"]),
-]);
+// Compat: aliases antigos apontam para FBNeo para nao quebrar chamadas do backend.
+const MAME_EXE = FBNEO_EXE;
+const MAMEPLUS_EXE = FBNEO_EXE;
 
 let mainWindow = null;
 let mameServerProc = null;
