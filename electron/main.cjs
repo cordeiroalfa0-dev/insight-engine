@@ -126,6 +126,7 @@ function spawnMameServer() {
       ELECTRON_RUN_AS_NODE: "1",
       MGA_MAME_EXE: MAME_EXE,
       MGA_MAMEPLUS_EXE: MAMEPLUS_EXE,
+      MGA_FBNEO_EXE: FBNEO_EXE,
       MGA_USER_DATA_DIR: app.getPath("userData"),
     },
     stdio: "inherit",
