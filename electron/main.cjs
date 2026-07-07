@@ -11,6 +11,15 @@ const fs = require("fs");
 const http = require("http");
 
 const isDev = !app.isPackaged;
+
+// Handler global — evita o popup "A JavaScript error occurred in the main process"
+process.on("uncaughtException", (err) => {
+  try { console.error("[MGA] uncaughtException:", err && err.stack || err); } catch { /* noop */ }
+});
+process.on("unhandledRejection", (err) => {
+  try { console.error("[MGA] unhandledRejection:", err); } catch { /* noop */ }
+});
+
 const APP_ROOT = isDev ? path.join(__dirname, "..") : app.getAppPath();
 const RESOURCE_ROOT = isDev ? path.join(APP_ROOT, "resources") : process.resourcesPath;
 const APP_PORT = 8080;
@@ -116,22 +125,28 @@ function spawnMameServer() {
     }
   }
   log("Iniciando mame-server.js...");
-  // Usa o node embutido no Electron (process.execPath) com ELECTRON_RUN_AS_NODE=1.
-  // Injeta MGA_MAME_EXE / MGA_MAMEPLUS_EXE para o backend resolver os binarios
-  // sem precisar consultar o usuario.
-  mameServerProc = spawn(process.execPath, [runnableServerPath], {
-    cwd: path.dirname(runnableServerPath),
-    env: {
-      ...process.env,
-      ELECTRON_RUN_AS_NODE: "1",
-      MGA_MAME_EXE: MAME_EXE,
-      MGA_MAMEPLUS_EXE: MAMEPLUS_EXE,
-      MGA_FBNEO_EXE: FBNEO_EXE,
-      MGA_USER_DATA_DIR: app.getPath("userData"),
-    },
-    stdio: "inherit",
-  });
-  mameServerProc.on("exit", (code) => log("mame-server saiu com código", code));
+  // Windows: process.execPath tem espacos ("Program Files"). Sem shell:true o spawn
+  // devolve ENOENT. Envolvemos em try/catch para nunca derrubar o main.
+  try {
+    mameServerProc = spawn(`"${process.execPath}"`, [`"${runnableServerPath}"`], {
+      cwd: path.dirname(runnableServerPath),
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: "1",
+        MGA_MAME_EXE: MAME_EXE,
+        MGA_MAMEPLUS_EXE: MAMEPLUS_EXE,
+        MGA_FBNEO_EXE: FBNEO_EXE,
+        MGA_USER_DATA_DIR: app.getPath("userData"),
+      },
+      stdio: "inherit",
+      shell: true,
+      windowsHide: true,
+    });
+    mameServerProc.on("error", (err) => log("mame-server erro:", err.message));
+    mameServerProc.on("exit", (code) => log("mame-server saiu com código", code));
+  } catch (err) {
+    log("Falha ao spawn mame-server:", err.message);
+  }
 }
 
 function serveStaticFile(res, filePath) {
