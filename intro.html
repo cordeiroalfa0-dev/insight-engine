@@ -6,411 +6,474 @@
 <title>Master Games Arcade</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
-
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; width: 100vw; height: 100vh; cursor: none; }
 
-  body {
-    background: #000;
-    overflow: hidden;
-    width: 100vw; height: 100vh;
-    font-family: 'VT323', monospace;
-    cursor: none;
-  }
-
-  /* VIDEO DE FUNDO */
   #bgVideo {
-    position: fixed; inset: 0;
-    width: 100%; height: 100%;
-    object-fit: cover;
-    z-index: 0;
-    opacity: 0;
-    animation: videoFadeIn 2s ease 0.5s forwards;
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; z-index: 0; opacity: 0; transition: opacity 1.5s ease;
   }
+  #bgVideo.visible { opacity: 1; }
 
-  @keyframes videoFadeIn {
-    to { opacity: 1; }
-  }
-
-  /* CAMADAS DE EFEITO */
-  .layer-dark {
+  #bgImage {
     position: fixed; inset: 0; z-index: 1;
-    background: rgba(0, 0, 10, 0.65);
+    background: url('assets/background.png') center center / cover no-repeat;
+    opacity: 0; transition: opacity 2.5s ease;
   }
+  #bgImage.visible { opacity: 1; }
 
-  .layer-vignette {
+  #darkLayer {
     position: fixed; inset: 0; z-index: 2;
-    background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.85) 100%);
+    background: rgba(0,0,10,0.65); transition: opacity 2.5s ease;
   }
+  #darkLayer.light { opacity: 0.15; }
 
-  /* SCANLINES CRT */
-  .scanlines {
+  .vignette {
     position: fixed; inset: 0; z-index: 3; pointer-events: none;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 3px,
-      rgba(0, 0, 0, 0.18) 3px,
-      rgba(0, 0, 0, 0.18) 4px
-    );
-    animation: scanMove 8s linear infinite;
+    background: radial-gradient(ellipse at center, transparent 25%, rgba(0,0,0,0.88) 100%);
   }
-  @keyframes scanMove {
-    0% { background-position: 0 0; }
-    100% { background-position: 0 100px; }
+  .scanlines {
+    position: fixed; inset: 0; z-index: 4; pointer-events: none;
+    background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.12) 3px, rgba(0,0,0,0.12) 4px);
   }
-
-  /* LINHA DE SCAN ANIMADA */
   .scan-sweep {
-    position: fixed; left: 0; right: 0; z-index: 4;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, rgba(0,229,255,0.4), transparent);
+    position: fixed; left: 0; right: 0; z-index: 5; height: 2px; pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(0,229,255,0.5), transparent);
     animation: sweep 4s linear infinite;
-    pointer-events: none;
   }
   @keyframes sweep {
-    0% { top: -2px; opacity: 0; }
-    5% { opacity: 1; }
-    95% { opacity: 1; }
-    100% { top: 100vh; opacity: 0; }
+    0% { top:-2px; opacity:0; } 5% { opacity:1; } 95% { opacity:1; } 100% { top:100vh; opacity:0; }
   }
 
-  /* GLITCH OVERLAY */
-  .glitch-overlay {
-    position: fixed; inset: 0; z-index: 5; pointer-events: none;
-    opacity: 0;
-    animation: glitchFlash 6s ease 3s infinite;
-  }
-  @keyframes glitchFlash {
-    0%,100% { opacity: 0; }
-    2% { opacity: 0.05; background: rgba(0,229,255,0.1); transform: translateX(-2px); }
-    4% { opacity: 0; }
-    6% { opacity: 0.03; background: rgba(224,64,251,0.08); transform: translateX(2px); }
-    8% { opacity: 0; }
-  }
+  .corner { position: fixed; z-index: 20; width: 44px; height: 44px; opacity: 0; transition: opacity 1s ease; }
+  .corner.show { opacity: 1; }
+  .corner-tl { top:16px; left:16px; }
+  .corner-tr { top:16px; right:16px; transform:scaleX(-1); }
+  .corner-bl { bottom:16px; left:16px; transform:scaleY(-1); }
+  .corner-br { bottom:16px; right:16px; transform:scale(-1); }
 
-  /* CONTAINER PRINCIPAL */
-  .intro-container {
+  #introContent {
     position: fixed; inset: 0; z-index: 10;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: flex-end;
-    padding-bottom: 20px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transition: opacity 2s ease;
   }
+  #introContent.hidden { opacity: 0; pointer-events: none; }
 
-  /* LOGO TOPO */
-  .logo-top {
-    position: fixed; top: 24px; left: 50%; transform: translateX(-50%); z-index: 20;
-    opacity: 0;
-    animation: fadeSlideDown 0.8s ease 1s forwards;
-  }
-  .logo-top-text {
-    font-family: 'Press Start 2P', monospace;
-    font-size: 9px; color: rgba(0,229,255,0.5);
-    letter-spacing: 4px;
-  }
-  @keyframes fadeSlideDown {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  /* CONTEÚDO CENTRAL */
-  .center-content {
-    text-align: center;
-    position: relative;
-  }
-
-  /* LINHA DECORATIVA TOPO */
-  .deco-line-top {
-    width: 0; height: 1px;
+  .deco-line {
+    height: 1px; width: 0; margin: 0 auto;
     background: linear-gradient(90deg, transparent, #00e5ff, #e040fb, transparent);
-    margin: 0 auto 10px;
-    animation: lineExpand 0.8s ease 1.5s forwards;
+    transition: width 1s ease;
   }
-  @keyframes lineExpand {
-    to { width: 400px; }
-  }
+  .deco-line.expand { width: 440px; }
+  .deco-line-bot { background: linear-gradient(90deg, transparent, #e040fb, #00e5ff, transparent); }
 
-  /* SUBTÍTULO */
   .subtitle {
-    font-family: 'Press Start 2P', monospace;
-    font-size: 10px; color: #e040fb;
-    letter-spacing: 6px;
-    opacity: 0; margin-bottom: 16px;
+    font-family: 'Press Start 2P', monospace; font-size: 10px;
+    color: #e040fb; letter-spacing: 6px;
+    opacity: 0; margin: 22px 0 14px;
     text-shadow: 0 0 20px #e040fb;
-    animation: fadeUp 0.6s ease 2s forwards;
+    transition: opacity 0.8s ease;
   }
+  .subtitle.show { opacity: 1; }
 
-  /* TITULO PRINCIPAL */
   .main-title {
     font-family: 'Press Start 2P', monospace;
-    font-size: clamp(10px, 1.6vw, 16px);
-    line-height: 1.4;
-    opacity: 0;
-    animation: titleReveal 0.8s ease 2.4s forwards;
-    position: relative;
+    font-size: clamp(26px, 4.5vw, 50px);
+    line-height: 1.55; text-align: center;
+    opacity: 0; transform: scale(0.95) translateY(12px);
+    transition: opacity 0.9s ease, transform 0.9s ease;
   }
-  .main-title .word1 { color: #fff; text-shadow: 0 0 30px rgba(255,255,255,0.3); display: block; }
-  .main-title .word2 { color: #00e5ff; text-shadow: 0 0 40px #00e5ff, 0 0 80px rgba(0,229,255,0.3); display: block; }
-  .main-title .word3 { color: #e040fb; text-shadow: 0 0 40px #e040fb, 0 0 80px rgba(224,64,251,0.3); display: block; }
+  .main-title.show { opacity: 1; transform: scale(1) translateY(0); }
+  .w1 { display:block; color:#fff; text-shadow:0 0 30px rgba(255,255,255,0.3); }
+  .w2 { display:block; color:#00e5ff; text-shadow:0 0 40px #00e5ff, 0 0 80px rgba(0,229,255,0.3); }
+  .w3 { display:block; color:#e040fb; text-shadow:0 0 40px #e040fb, 0 0 80px rgba(224,64,251,0.3); }
 
-  @keyframes titleReveal {
-    from { opacity: 0; transform: scale(0.95) translateY(10px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
+  .version-row {
+    display:flex; align-items:center; gap:12px;
+    margin-top:22px; opacity:0; transition:opacity 0.8s ease;
   }
+  .version-row.show { opacity:1; }
+  .vdot { width:7px; height:7px; border-radius:50%; background:#00e676; box-shadow:0 0 8px #00e676; animation:pulse 1.4s ease infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.4)} }
+  .vtext { font-family:'Press Start 2P',monospace; font-size:8px; color:rgba(255,255,255,0.35); letter-spacing:3px; }
 
-  /* GLITCH NO TÍTULO */
-  .main-title::before {
-    content: attr(data-text);
-    position: absolute; inset: 0;
-    color: #00e5ff; opacity: 0;
-    animation: titleGlitch 5s ease 4s infinite;
-    clip-path: polygon(0 30%, 100% 30%, 100% 50%, 0 50%);
+  #insertCoin {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-bottom: 52px; gap: 22px;
+    opacity: 0; pointer-events: none; transition: opacity 1.8s ease;
   }
-  @keyframes titleGlitch {
-    0%,100% { opacity: 0; transform: none; }
-    92% { opacity: 0; }
-    93% { opacity: 0.8; transform: translateX(-4px); }
-    94% { opacity: 0; transform: translateX(4px); }
-    96% { opacity: 0.5; transform: translateX(-2px); }
-    97% { opacity: 0; }
-  }
+  #insertCoin.show { opacity:1; pointer-events:all; }
 
-  /* LINHA DECORATIVA BAIXO */
-  .deco-line-bottom {
-    width: 0; height: 1px;
-    background: linear-gradient(90deg, transparent, #e040fb, #00e5ff, transparent);
-    margin: 8px auto 10px;
-    animation: lineExpand 0.8s ease 3s forwards;
+  .coin-text {
+    font-family:'Press Start 2P',monospace; font-size:14px;
+    color:#ffea00; letter-spacing:5px;
+    text-shadow:0 0 20px #ffea00, 0 0 40px rgba(255,234,0,0.4);
+    animation: blink 1s step-end infinite;
   }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
-  /* CRÉDITOS / VERSÃO */
-  .version-badge {
-    display: inline-flex; align-items: center; gap: 10px;
-    opacity: 0;
-    animation: fadeUp 0.6s ease 3.2s forwards;
-  }
-  .version-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: #00e676;
-    box-shadow: 0 0 8px #00e676;
-    animation: pulse 1.5s ease infinite;
-  }
-  @keyframes pulse {
-    0%,100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(1.3); }
-  }
-  .version-text {
-    font-family: 'Press Start 2P', monospace;
-    font-size: 8px; color: rgba(255,255,255,0.4);
-    letter-spacing: 3px;
-  }
-
-  /* BOTÃO ENTRAR */
   .enter-btn {
-    margin-top: 10px; opacity: 0;
-    animation: fadeUp 0.6s ease 3.8s forwards;
+    font-family:'Press Start 2P',monospace; font-size:11px;
+    letter-spacing:3px; color:#000;
+    background:#00e5ff; border:none;
+    padding:14px 48px; border-radius:3px; cursor:pointer;
+    box-shadow:0 0 30px rgba(0,229,255,0.6), 0 0 60px rgba(0,229,255,0.2);
+    animation:btnPulse 2s ease infinite;
+    transition:transform 0.1s, box-shadow 0.2s;
   }
-  .enter-btn button {
-    font-family: 'Press Start 2P', monospace;
-    font-size: 9px; letter-spacing: 2px;
-    color: #000; background: #00e5ff;
-    border: none; padding: 10px 32px;
-    border-radius: 3px; cursor: pointer;
-    box-shadow: 0 0 30px rgba(0,229,255,0.5), 0 0 60px rgba(0,229,255,0.2);
-    transition: all 0.2s;
-    animation: btnPulse 2s ease 4.5s infinite;
-  }
-  .enter-btn button:hover {
-    background: #fff;
-    box-shadow: 0 0 50px rgba(0,229,255,0.8), 0 0 100px rgba(0,229,255,0.4);
-    transform: scale(1.05);
-  }
-  .enter-btn button:active { transform: scale(0.97); }
+  .enter-btn:hover { background:#fff; box-shadow:0 0 50px rgba(0,229,255,0.9), 0 0 100px rgba(0,229,255,0.4); transform:scale(1.06); }
+  .enter-btn:active { transform:scale(0.97); }
   @keyframes btnPulse {
-    0%,100% { box-shadow: 0 0 30px rgba(0,229,255,0.5), 0 0 60px rgba(0,229,255,0.2); }
-    50% { box-shadow: 0 0 50px rgba(0,229,255,0.8), 0 0 100px rgba(0,229,255,0.4); }
+    0%,100%{box-shadow:0 0 30px rgba(0,229,255,0.5),0 0 60px rgba(0,229,255,0.2)}
+    50%{box-shadow:0 0 50px rgba(0,229,255,0.9),0 0 100px rgba(0,229,255,0.4)}
   }
 
-  /* INSERT COIN */
-  .insert-coin {
-    display: none;
-  }
-  .insert-coin-text {
-    display: none;
-  }
-  @keyframes blink {
-    0%,100% { opacity: 1; }
-    50% { opacity: 0; }
-  }
-
-  /* CANTOS DECORATIVOS */
-  .corner {
-    position: fixed; z-index: 20; width: 40px; height: 40px;
-    opacity: 0; animation: fadeIn 0.5s ease 1.2s forwards;
-  }
-  .corner svg { width: 100%; height: 100%; }
-  .corner-tl { top: 16px; left: 16px; }
-  .corner-tr { top: 16px; right: 16px; transform: scaleX(-1); }
-  .corner-bl { bottom: 16px; left: 16px; transform: scaleY(-1); }
-  .corner-br { bottom: 16px; right: 16px; transform: scale(-1); }
-
-  @keyframes fadeIn { to { opacity: 1; } }
-
-  /* PARTÍCULAS */
   .particle {
-    position: fixed; pointer-events: none; z-index: 8;
-    width: 2px; height: 2px; border-radius: 50%;
-    background: #00e5ff;
-    animation: float linear infinite;
+    position:fixed; pointer-events:none; z-index:8; border-radius:50%;
+    animation:floatUp linear infinite;
   }
-  @keyframes float {
-    0% { transform: translateY(100vh) translateX(0); opacity: 0; }
-    10% { opacity: 1; }
-    90% { opacity: 1; }
-    100% { transform: translateY(-10vh) translateX(var(--drift)); opacity: 0; }
+  @keyframes floatUp {
+    0%   { transform:translateY(100vh) translateX(0); opacity:0; }
+    10%  { opacity:0.8; }
+    90%  { opacity:0.5; }
+    100% { transform:translateY(-5vh) translateX(var(--drift)); opacity:0; }
   }
 
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
+  #cursor {
+    position:fixed; z-index:9999; pointer-events:none;
+    width:8px; height:8px; border-radius:50%;
+    background:#00e5ff; box-shadow:0 0 10px #00e5ff;
+    transform:translate(-50%,-50%);
+    transition:width 0.1s, height 0.1s;
   }
 
-  /* TELA DE SAÍDA */
   #exitOverlay {
-    position: fixed; inset: 0; z-index: 100;
-    background: #000; opacity: 0; pointer-events: none;
-    transition: opacity 0.6s ease;
+    position:fixed; inset:0; z-index:100;
+    background:#000; opacity:0; pointer-events:none;
+    transition:opacity 0.7s ease;
   }
-  #exitOverlay.active { opacity: 1; pointer-events: all; }
+  #exitOverlay.active { opacity:1; pointer-events:all; }
 </style>
 </head>
 <body>
 
-<!-- VÍDEO DE FUNDO (com som — Electron libera autoplay) -->
-<video id="bgVideo" autoplay loop playsinline preload="auto">
+<video id="bgVideo" autoplay muted playsinline preload="auto">
   <source src="intro_bg.mp4" type="video/mp4">
 </video>
 
-<!-- CAMADAS -->
-<div class="layer-dark"></div>
-<div class="layer-vignette"></div>
-<div class="scanlines"></div>
-<div class="scan-sweep"></div>
-<div class="glitch-overlay"></div>
-
-<!-- CANTOS DECORATIVOS -->
-<div class="corner corner-tl">
-  <svg viewBox="0 0 40 40" fill="none">
-    <polyline points="40,2 2,2 2,40" stroke="#00e5ff" stroke-width="1.5" opacity="0.6"/>
-    <polyline points="40,8 8,8 8,40" stroke="#00e5ff" stroke-width="0.5" opacity="0.3"/>
-  </svg>
-</div>
-<div class="corner corner-tr">
-  <svg viewBox="0 0 40 40" fill="none">
-    <polyline points="40,2 2,2 2,40" stroke="#00e5ff" stroke-width="1.5" opacity="0.6"/>
-  </svg>
-</div>
-<div class="corner corner-bl">
-  <svg viewBox="0 0 40 40" fill="none">
-    <polyline points="40,2 2,2 2,40" stroke="#e040fb" stroke-width="1.5" opacity="0.6"/>
-  </svg>
-</div>
-<div class="corner corner-br">
-  <svg viewBox="0 0 40 40" fill="none">
-    <polyline points="40,2 2,2 2,40" stroke="#e040fb" stroke-width="1.5" opacity="0.6"/>
-  </svg>
-</div>
-
-<!-- CONTEÚDO CENTRAL -->
-<div class="intro-container">
-  <div class="center-content">
-    <div class="deco-line-top"></div>
-    
-    <div class="main-title" data-text="MASTER GAMES ARCADE">
-      <span style="display:inline; color:#fff; text-shadow:0 0 30px rgba(255,255,255,0.3);">MASTER </span><span style="display:inline; color:#00e5ff; text-shadow:0 0 40px #00e5ff;">GAMES </span><span style="display:inline; color:#e040fb; text-shadow:0 0 40px #e040fb;">ARCADE</span>
-    </div>
-    <div class="deco-line-bottom"></div>
-    
-    <div class="enter-btn">
-      <button onclick="enterLauncher()">▶ &nbsp; INSERIR FICHA</button>
-    </div>
+<!-- Overlay "Clique para começar com som" -->
+<div id="soundGate" style="position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);cursor:pointer;">
+  <div style="font-family:'Press Start 2P',monospace;font-size:14px;color:#00e5ff;letter-spacing:4px;text-shadow:0 0 20px #00e5ff;text-align:center;line-height:1.8;">
+    ▶ &nbsp; CLIQUE PARA INICIAR<br/>
+    <span style="font-size:9px;color:#e040fb;letter-spacing:3px;">COM SOM</span>
   </div>
 </div>
 
-<!-- INSERT COIN -->
-<div class="insert-coin">
-  <div class="insert-coin-text">★ &nbsp; PRESSIONE QUALQUER TECLA &nbsp; ★</div>
+<div id="bgImage"></div>
+<div id="darkLayer"></div>
+<div class="vignette"></div>
+<div class="scanlines"></div>
+<div class="scan-sweep"></div>
+
+<!-- CANTOS -->
+<div class="corner corner-tl" id="c1"><svg viewBox="0 0 44 44" fill="none"><polyline points="44,2 2,2 2,44" stroke="#00e5ff" stroke-width="1.5" opacity="0.7"/><polyline points="44,8 8,8 8,44" stroke="#00e5ff" stroke-width="0.5" opacity="0.3"/></svg></div>
+<div class="corner corner-tr" id="c2"><svg viewBox="0 0 44 44" fill="none"><polyline points="44,2 2,2 2,44" stroke="#00e5ff" stroke-width="1.5" opacity="0.7"/></svg></div>
+<div class="corner corner-bl" id="c3"><svg viewBox="0 0 44 44" fill="none"><polyline points="44,2 2,2 2,44" stroke="#e040fb" stroke-width="1.5" opacity="0.7"/></svg></div>
+<div class="corner corner-br" id="c4"><svg viewBox="0 0 44 44" fill="none"><polyline points="44,2 2,2 2,44" stroke="#e040fb" stroke-width="1.5" opacity="0.7"/></svg></div>
+
+<!-- CONTEÚDO DA INTRO -->
+<div id="introContent">
+  <div class="deco-line" id="lineTop"></div>
+  <div class="subtitle" id="subtitle">APRESENTA</div>
+  <div class="main-title" id="mainTitle">
+    <span class="w1">MASTER</span>
+    <span class="w2">GAMES</span>
+    <span class="w3">ARCADE</span>
+  </div>
+  <div class="deco-line deco-line-bot" id="lineBot" style="margin-top:24px"></div>
+  <div class="version-row" id="vrow">
+    <div class="vdot"></div>
+    <div class="vtext">FBNEO LAUNCHER · ULTIMATE EDITION</div>
+    <div class="vdot"></div>
+  </div>
 </div>
 
-<!-- OVERLAY DE SAÍDA -->
+<!-- INSERIR FICHA -->
+<div id="insertCoin">
+  <div class="coin-text">★ &nbsp; INSERIR FICHA &nbsp; ★</div>
+  <button class="enter-btn" onclick="enterLauncher()">▶ &nbsp; JOGAR AGORA</button>
+</div>
+
 <div id="exitOverlay"></div>
+<div id="cursor"></div>
 
 <script>
-  // PARTÍCULAS FLUTUANTES
-  function createParticles() {
-    const colors = ['#00e5ff','#e040fb','#00e676'];
-    for (let i = 0; i < 25; i++) {
-      const p = document.createElement('div');
-      p.className = 'particle';
-      p.style.cssText = `
-        left: ${Math.random()*100}vw;
-        animation-duration: ${6 + Math.random()*10}s;
-        animation-delay: ${Math.random()*8}s;
-        --drift: ${(Math.random()-0.5)*100}px;
-        background: ${colors[Math.floor(Math.random()*colors.length)]};
-        box-shadow: 0 0 4px ${colors[Math.floor(Math.random()*colors.length)]};
-        width: ${1 + Math.random()*2}px;
-        height: ${1 + Math.random()*2}px;
-      `;
-      document.body.appendChild(p);
-    }
-  }
-  createParticles();
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
 
-  // ENTRAR NO LAUNCHER
-  function enterLauncher() {
-    const overlay = document.getElementById('exitOverlay');
-    overlay.classList.add('active');
-    setTimeout(() => {
-      try { sessionStorage.setItem('mga.introSeen','1'); } catch(e){}
-      window.location.href = 'http://localhost:8080/?launcher=1';
-    }, 700);
-  }
+// ---- SONS SINTETIZADOS ----
 
-  // Fallback: se o browser bloquear autoplay com som, tenta de novo
-  // no primeiro evento do usuario (no Electron isso normalmente nao acontece).
-  const v = document.getElementById('bgVideo');
-  if (v) {
-    v.volume = 1.0;
-    const p = v.play();
-    if (p && p.catch) p.catch(() => {
-      const kick = () => { v.muted = false; v.play().catch(() => {}); };
-      window.addEventListener('click', kick, { once: true });
-      window.addEventListener('keydown', kick, { once: true });
+// Hum ambiente tipo arcade ligando
+function playAmbientHum() {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.type = 'sawtooth'; osc.frequency.value = 60;
+  gain.gain.setValueAtTime(0, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.04, ctx.currentTime + 2);
+  osc.start(); osc.stop(ctx.currentTime + 30);
+}
+
+// Power on — arcade ligando
+function playPowerOn() {
+  const t = ctx.currentTime;
+  // sweep de frequência subindo
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(80, t);
+  osc.frequency.exponentialRampToValueAtTime(880, t + 1.2);
+  gain.gain.setValueAtTime(0.18, t);
+  gain.gain.linearRampToValueAtTime(0, t + 1.4);
+  osc.start(t); osc.stop(t + 1.5);
+
+  // acorde de abertura
+  setTimeout(() => {
+    [261, 329, 392, 523].forEach((freq, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = 'square'; o.frequency.value = freq;
+      const st = ctx.currentTime + i * 0.08;
+      g.gain.setValueAtTime(0.1, st);
+      g.gain.exponentialRampToValueAtTime(0.001, st + 0.8);
+      o.start(st); o.stop(st + 0.9);
     });
+  }, 1200);
+}
+
+// Logo reveal — som de letras aparecendo
+function playLogoReveal() {
+  ['MASTER','GAMES','ARCADE'].forEach((_, i) => {
+    setTimeout(() => {
+      const freqs = [523, 659, 784];
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'square'; osc.frequency.value = freqs[i];
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(); osc.stop(ctx.currentTime + 0.35);
+    }, i * 250);
+  });
+}
+
+// Transição para imagem — woosh + shimmer
+function playImageReveal() {
+  const t = ctx.currentTime;
+  // woosh
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 1.5, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random()*2-1) * (1 - i/data.length);
+  const src = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  src.buffer = buf;
+  filter.type = 'bandpass'; filter.frequency.setValueAtTime(200, t); filter.frequency.exponentialRampToValueAtTime(4000, t+1);
+  filter.Q.value = 0.5;
+  src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.25, t); gain.gain.linearRampToValueAtTime(0, t+1.5);
+  src.start(t); src.stop(t+1.5);
+
+  // shimmer / glitter
+  setTimeout(() => {
+    for(let i=0;i<6;i++){
+      setTimeout(()=>{
+        const o=ctx.createOscillator(), g=ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type='sine'; o.frequency.value=1200+Math.random()*2000;
+        g.gain.setValueAtTime(0.06,ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.25);
+        o.start(); o.stop(ctx.currentTime+0.3);
+      }, i*120);
+    }
+  }, 400);
+}
+
+// Som de moeda ao aparecer INSERT COIN
+function playCoinSound() {
+  const t = ctx.currentTime;
+  [1046, 1318].forEach((freq, i) => {
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type='square'; o.frequency.value=freq;
+    const st=t+i*0.1;
+    g.gain.setValueAtTime(0.15,st);
+    g.gain.exponentialRampToValueAtTime(0.001,st+0.3);
+    o.start(st); o.stop(st+0.35);
+  });
+}
+
+// Som de start ao clicar
+function playStartSound() {
+  const t = ctx.currentTime;
+  [392,523,659,784,1046].forEach((freq,i)=>{
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type='square'; o.frequency.value=freq;
+    const st=t+i*0.07;
+    g.gain.setValueAtTime(0.15,st);
+    g.gain.exponentialRampToValueAtTime(0.001,st+0.35);
+    o.start(st); o.stop(st+0.4);
+  });
+}
+
+// ---- SEQUÊNCIA DA INTRO ----
+let canEnter = false;
+let videoEnded = false;
+
+function startIntro() {
+  playAmbientHum();
+  setTimeout(playPowerOn, 300);
+
+  // Fade in do vídeo
+  const video = document.getElementById('bgVideo');
+  video.classList.add('visible');
+
+  // Cantos
+  setTimeout(() => {
+    ['c1','c2','c3','c4'].forEach(id => document.getElementById(id).classList.add('show'));
+  }, 800);
+
+  // Linhas
+  setTimeout(() => {
+    document.getElementById('lineTop').classList.add('expand');
+    document.getElementById('lineBot').classList.add('expand');
+  }, 1400);
+
+  // Subtitle
+  setTimeout(() => {
+    document.getElementById('subtitle').classList.add('show');
+  }, 1900);
+
+  // Logo com som
+  setTimeout(() => {
+    document.getElementById('mainTitle').classList.add('show');
+    playLogoReveal();
+  }, 2400);
+
+  // Version
+  setTimeout(() => {
+    document.getElementById('vrow').classList.add('show');
+  }, 3200);
+}
+
+// Quando vídeo terminar → transição para imagem
+document.getElementById('bgVideo').addEventListener('ended', function() {
+  videoEnded = true;
+  transitionToImage();
+});
+
+// Fallback: se vídeo não carregar
+document.getElementById('bgVideo').addEventListener('error', function() {
+  setTimeout(transitionToImage, 5000);
+});
+
+function transitionToImage() {
+  playImageReveal();
+
+  // Some o conteúdo da intro
+  document.getElementById('introContent').classList.add('hidden');
+
+  // Escurece o vídeo
+  document.getElementById('bgVideo').style.transition = 'opacity 2s ease';
+  document.getElementById('bgVideo').style.opacity = '0';
+
+  // Aparece a imagem de fundo
+  setTimeout(() => {
+    document.getElementById('bgImage').classList.add('visible');
+    document.getElementById('darkLayer').classList.add('light');
+  }, 500);
+
+  // Aparece INSERT COIN
+  setTimeout(() => {
+    document.getElementById('insertCoin').classList.add('show');
+    playCoinSound();
+    canEnter = true;
+  }, 2500);
+}
+
+function enterLauncher() {
+  if (!canEnter) return;
+  canEnter = false;
+  playStartSound();
+  setTimeout(() => {
+    document.getElementById('exitOverlay').classList.add('active');
+    setTimeout(() => {
+      // Sinaliza que a intro já passou e volta para o launcher (React)
+      try { sessionStorage.setItem('mga.introSeen','1'); } catch(e){}
+      window.location.href = '/?launcher=1';
+    }, 700);
+  }, 400);
+}
+
+// Qualquer tecla entra
+document.addEventListener('keydown', () => { if (canEnter) enterLauncher(); });
+
+// Cursor
+document.addEventListener('mousemove', e => {
+  const c = document.getElementById('cursor');
+  c.style.left = e.clientX + 'px';
+  c.style.top = e.clientY + 'px';
+});
+
+// Partículas
+function createParticles() {
+  const colors = ['#00e5ff','#e040fb','#ffea00','#00e676'];
+  for (let i = 0; i < 20; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const c = colors[Math.floor(Math.random()*colors.length)];
+    const sz = 1.5 + Math.random()*2;
+    p.style.cssText = `
+      left:${Math.random()*100}vw;
+      width:${sz}px; height:${sz}px;
+      background:${c}; box-shadow:0 0 4px ${c};
+      animation-duration:${7+Math.random()*10}s;
+      animation-delay:${Math.random()*8}s;
+      --drift:${(Math.random()-0.5)*120}px;
+    `;
+    document.body.appendChild(p);
   }
+}
+createParticles();
 
-  // QUALQUER TECLA ENTRA (depois de 4s)
-  let canEnter = false;
-  setTimeout(() => { canEnter = true; }, 4000);
-  document.addEventListener('keydown', () => {
-    if (canEnter) enterLauncher();
-  });
+// Inicia ao primeiro clique/toque (necessário pra desmutar vídeo + WebAudio)
+let started = false;
+function init() {
+  if (started) return;
+  started = true;
+  // Esconde o portão de som
+  const gate = document.getElementById('soundGate');
+  if (gate) gate.style.display = 'none';
+  // Desmuta o vídeo (só funciona após gesto do usuário)
+  const v = document.getElementById('bgVideo');
+  try {
+    v.muted = false;
+    v.volume = 0.8;
+    v.currentTime = 0;
+    v.play().catch(()=>{});
+  } catch(e){}
+  ctx.resume().then(startIntro);
+  document.removeEventListener('click', init);
+  document.removeEventListener('keydown', init);
+  document.removeEventListener('touchstart', init);
+}
+document.addEventListener('click', init);
+document.addEventListener('keydown', init);
+document.addEventListener('touchstart', init);
 
-  // CURSOR PERSONALIZADO
-  const cursor = document.createElement('div');
-  cursor.style.cssText = `
-    position: fixed; z-index: 9999; pointer-events: none;
-    width: 8px; height: 8px; border-radius: 50%;
-    background: #00e5ff;
-    box-shadow: 0 0 10px #00e5ff;
-    transform: translate(-50%, -50%);
-    transition: width 0.1s, height 0.1s;
-  `;
-  document.body.appendChild(cursor);
-  document.addEventListener('mousemove', e => {
-    cursor.style.left = e.clientX + 'px';
-    cursor.style.top = e.clientY + 'px';
-  });
 </script>
 </body>
 </html>

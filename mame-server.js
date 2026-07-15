@@ -1,10 +1,10 @@
 /**
- * MAME Local Backend Server - v3
- * Correção: spawn com shell:true para garantir execução no Windows
+ * Master Games Arcade Local Backend - FBNeo edition
+ * Runs inside Electron and launches the bundled FinalBurn Neo emulator.
  */
 
 import http from "http";
-import { spawn, execFile } from "child_process";
+import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -16,13 +16,14 @@ try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* noop */ }
 const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 const LOG_FILE = path.join(DATA_DIR, "launches.log");
 
-// Emuladores embutidos. Em produção (Electron) os caminhos vêm via env
-// MGA_MAME_EXE / MGA_MAMEPLUS_EXE injetadas pelo main.cjs. Em dev usamos
-// resources/<emu>/ ao lado do projeto. Nada é descoberto no PC do usuário.
-function resolveEmu(envVar, relPath) {
+// Emulador embutido. Em produção (Electron) o caminho vem via env
+// MGA_FBNEO_EXE injetada pelo main.cjs. Em dev usamos resources/fbneo/.
+// Nada é descoberto no PC do usuário.
+function resolveEmu(envVars, relPaths) {
   const candidates = [];
-  if (process.env[envVar]) candidates.push(process.env[envVar]);
-  candidates.push(path.join(__dirname, "resources", ...relPath));
+  for (const envVar of envVars) if (process.env[envVar]) candidates.push(process.env[envVar]);
+  for (const relPath of relPaths) candidates.push(path.join(__dirname, "resources", ...relPath));
+  candidates.push(path.join(__dirname, "fbneo", "fbneo64.exe"));
   for (const c of candidates) {
     try {
       const abs = path.resolve(c);
@@ -31,8 +32,9 @@ function resolveEmu(envVar, relPath) {
   }
   return "";
 }
-function getMameExe()     { return resolveEmu("MGA_MAME_EXE",     ["mame", "mame.exe"]); }
-function getMamePlusExe() { return resolveEmu("MGA_MAMEPLUS_EXE", ["mameplus", "mamep64.exe"]); }
+function getFbneoExe() {
+  return resolveEmu(["MGA_FBNEO_EXE", "MGA_MAME_EXE", "MGA_MAMEPLUS_EXE"], [["fbneo", "fbneo64.exe"]]);
+}
 
 function readConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")); } catch { return {}; }
@@ -100,6 +102,26 @@ function writeMameIniKey(mameDir, key, value) {
   fs.writeFileSync(iniPath, newLines.join("\r\n"), "utf8");
 }
 
+function ensureTrailingSlash(dir) {
+  const trimmed = String(dir || "").trim();
+  if (!trimmed) return "";
+  return /[\\/]$/.test(trimmed) ? trimmed : `${trimmed}\\`;
+}
+
+function writeFbneoConfig(fbneoDir, romsDir) {
+  const configDir = path.join(fbneoDir, "config");
+  if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+  const iniPath = path.join(configDir, "fbneo.ini");
+  const normalized = ensureTrailingSlash(path.resolve(romsDir));
+  let content = fs.existsSync(iniPath) ? fs.readFileSync(iniPath, "utf8") : "";
+  const lines = content.split(/\r?\n/).filter((line) => !/^szAppRomPaths\[\d+\]\s+/i.test(line.trim()));
+  lines.push("", "// The paths to search for rom zips (include trailing backslash)");
+  lines.push(`szAppRomPaths[0] ${normalized}`);
+  for (let i = 1; i < 20; i++) lines.push(`szAppRomPaths[${i}] `);
+  fs.writeFileSync(iniPath, lines.join("\r\n"), "utf8");
+  return { iniPath, rompath: normalized };
+}
+
 async function handleRequest(req, res) {
   const url = new URL(req.url, `http://localhost:${PORT}`);
 
@@ -107,7 +129,7 @@ async function handleRequest(req, res) {
 
   // GET /api/health
   if (req.method === "GET" && url.pathname === "/api/health") {
-    json(res, 200, { ok: true, port: PORT, version: "v8.0", emulators: ["mame", "mameplus"], bundled: true });
+    json(res, 200, { ok: true, port: PORT, version: "fbneo-v3", emulators: ["fbneo"], bundled: true });
     return;
   }
 
@@ -199,13 +221,13 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // GET /api/emuladores — verifica os emuladores EMBUTIDOS no app (sem busca no PC)
+  // GET /api/emuladores — verifica o FBNeo EMBUTIDO no app (sem busca no PC)
   if (req.method === "GET" && url.pathname === "/api/emuladores") {
-    const mameResolved = getMameExe();
-    const mamePlusResolved = getMamePlusExe();
+    const fbneoResolved = getFbneoExe();
     json(res, 200, {
-      mame: { id: "mame", label: "MAME 0.288", path: mameResolved, exists: !!mameResolved },
-      mameplus: { id: "mameplus", label: "MAMEPlus 0.168", path: mamePlusResolved, exists: !!mamePlusResolved },
+      fbneo: { id: "fbneo", label: "FinalBurn Neo", path: fbneoResolved, exists: !!fbneoResolved },
+      mame: { id: "fbneo", label: "FinalBurn Neo", path: fbneoResolved, exists: !!fbneoResolved },
+      mameplus: { id: "fbneo", label: "FinalBurn Neo", path: fbneoResolved, exists: !!fbneoResolved },
     });
     return;
   }
@@ -216,23 +238,16 @@ async function handleRequest(req, res) {
     try { body = await parseBody(req); } catch { json(res, 400, { error: "JSON inválido" }); return; }
     const { romsPath } = body;
     if (!romsPath) { json(res, 400, { error: "romsPath obrigatório" }); return; }
-    const mameExe = getMameExe();
-    if (!mameExe) { json(res, 404, { error: "MAME embutido não encontrado nos recursos do app" }); return; }
-    const mameDir = path.dirname(mameExe);
+    const fbneoExe = getFbneoExe();
+    if (!fbneoExe) { json(res, 404, { error: "FBNeo embutido não encontrado nos recursos do app" }); return; }
+    const fbneoDir = path.dirname(fbneoExe);
     const romsDir = path.resolve(romsPath.trim());
-    const iniPath = path.join(mameDir, "mame.ini");
-    if (!fs.existsSync(iniPath)) {
-      console.log("[MAME] Criando mame.ini com -createconfig...");
-      await new Promise((resolve) => {
-        execFile(mameExe, ["-createconfig"], { cwd: mameDir }, () => resolve());
-      });
-    }
     try {
-      writeMameIniKey(mameDir, "rompath", romsDir);
-      console.log(`[MAME] rompath salvo no mame.ini: ${romsDir}`);
-      json(res, 200, { ok: true, iniPath, rompath: romsDir });
+      const result = writeFbneoConfig(fbneoDir, romsDir);
+      console.log(`[FBNeo] rompath salvo no fbneo.ini: ${result.rompath}`);
+      json(res, 200, { ok: true, ...result });
     } catch (err) {
-      json(res, 500, { error: `Falha ao escrever mame.ini: ${err.message}` });
+      json(res, 500, { error: `Falha ao escrever fbneo.ini: ${err.message}` });
     }
     return;
   }
@@ -241,10 +256,10 @@ async function handleRequest(req, res) {
   // Escreve cfg/default.cfg com mapeamento de TECLADO padrão para todas as ROMs.
   if (req.method === "POST" && url.pathname === "/api/reset-controls") {
     try { await parseBody(req); } catch { /* body opcional */ }
-    const mameExe = getMameExe();
-    if (!mameExe) { json(res, 404, { error: "MAME embutido não encontrado nos recursos do app" }); return; }
-    const mameDir = path.dirname(mameExe);
-    const cfgDir = path.join(mameDir, "cfg");
+    const fbneoExe = getFbneoExe();
+    if (!fbneoExe) { json(res, 404, { error: "FBNeo embutido não encontrado nos recursos do app" }); return; }
+    const fbneoDir = path.dirname(fbneoExe);
+    const cfgDir = path.join(fbneoDir, "config", "presets");
     try {
       if (!fs.existsSync(cfgDir)) fs.mkdirSync(cfgDir, { recursive: true });
       // Mapeamento de teclado universal (P1 + P2 + sistema). Aplica-se a TODAS as ROMs
@@ -303,8 +318,8 @@ ${ports}
           }
         }
       } catch {}
-      console.log(`[MAME] Teclado padrão aplicado em ${cfgDir}`);
-      json(res, 200, { ok: true, cfgDir, mappings: map.length });
+      console.log(`[FBNeo] Preset de teclado preparado em ${cfgDir}`);
+      json(res, 200, { ok: true, cfgDir, mappings: map.length, note: "FBNeo usa controles próprios; o preset MAME foi mantido apenas como referência." });
     } catch (err) {
       json(res, 500, { error: `Falha ao escrever default.cfg: ${err.message}` });
     }
@@ -319,52 +334,48 @@ ${ports}
     if (!romName) { json(res, 400, { error: "romName obrigatório" }); return; }
 
     // Resolve o binario embutido (sem ler caminhos do frontend)
-    const mameExe = emulator === "mameplus" ? getMamePlusExe() : getMameExe();
-    if (!mameExe) {
-      json(res, 404, { error: `MAME não encontrado: ${mameExe}` }); return;
+    const fbneoExe = getFbneoExe();
+    if (!fbneoExe) {
+      json(res, 404, { error: "FBNeo não encontrado nos recursos do app" }); return;
     }
 
-    const mameDir = path.dirname(mameExe);
+    const fbneoDir = path.dirname(fbneoExe);
     const rom = romName.replace(/\.(zip|7z|chd)$/i, "");
 
-    // Flags: por padrão NÃO mostra UI/menu do MAME, vai direto ao jogo em fullscreen.
-    // -skip_gameinfo: pula a tela de info
-    // -nogameinfo / -skip_warnings: silencia avisos
-    // Se showMame=true → abre em janela visível com console
-    const baseFlags = "-skip_gameinfo -nogameinfo";
-    const flags = showMame ? `${baseFlags} -window` : baseFlags;
+    // FBNeo: fbneo64.exe <rom> abre direto em fullscreen; -w abre em janela.
+    const flags = showMame ? "-w" : "";
 
-    console.log(`[${emulator || "mame"}] Iniciando: "${mameExe}" ${rom} ${flags}  (showMame=${!!showMame})`);
+    console.log(`[FBNeo] Iniciando: "${fbneoExe}" ${rom} ${flags}  (showMame=${!!showMame})`);
 
     try {
-      const mameExeQuoted = mameExe.includes(" ") ? `"${mameExe}"` : mameExe;
-      const cmd = `${mameExeQuoted} ${rom} ${flags}`;
+      const fbneoExeQuoted = fbneoExe.includes(" ") ? `"${fbneoExe}"` : fbneoExe;
+      const cmd = `${fbneoExeQuoted} ${rom}${flags ? ` ${flags}` : ""}`;
 
       let child;
       if (showMame) {
-        // Modo visível: abre console + janela do MAME normalmente
-        child = spawn("cmd.exe", ["/c", "start", "", "/D", mameDir, mameExe, rom, ...flags.split(" ")], {
-          cwd: mameDir, detached: true, stdio: "ignore",
+        // Modo visível: abre FBNeo em janela
+        child = spawn("cmd.exe", ["/c", "start", "", "/D", fbneoDir, fbneoExe, rom, "-w"], {
+          cwd: fbneoDir, detached: true, stdio: "ignore", windowsHide: true,
         });
       } else {
         // Modo oculto (padrão): VBScript esconde o console; só o jogo aparece em fullscreen
         const vbsContent = `Set oShell = CreateObject("WScript.Shell")\r\noShell.Run "${cmd.replace(/"/g, '""')}", 0, False\r\n`;
-        const vbsPath = path.join(mameDir, "_mga_launch.vbs");
+        const vbsPath = path.join(fbneoDir, "_mga_launch.vbs");
         fs.writeFileSync(vbsPath, vbsContent, "utf8");
         child = spawn("wscript.exe", [vbsPath], {
-          cwd: mameDir, detached: true, stdio: "ignore", windowsHide: true,
+          cwd: fbneoDir, detached: true, stdio: "ignore", windowsHide: true,
         });
         setTimeout(() => { try { fs.unlinkSync(vbsPath); } catch {} }, 10000);
       }
 
-      child.on("error", (err) => console.error(`[MAME] Erro ao lançar ${rom}:`, err.message));
+      child.on("error", (err) => console.error(`[FBNeo] Erro ao lançar ${rom}:`, err.message));
       child.unref();
 
-      appendLog({ rom, ok: true, pid: child.pid, showMame: !!showMame, emulator: emulator || "mame" });
-      json(res, 200, { ok: true, rom, pid: child.pid, cmd, showMame: !!showMame, emulator: emulator || "mame", exePath: mameExe });
+      appendLog({ rom, ok: true, pid: child.pid, showMame: !!showMame, emulator: "fbneo" });
+      json(res, 200, { ok: true, rom, pid: child.pid, cmd, showMame: !!showMame, emulator: "fbneo", exePath: fbneoExe });
     } catch (err) {
-      console.error(`[MAME] Falha:`, err);
-      json(res, 500, { error: `Falha ao iniciar MAME: ${err.message}` });
+      console.error(`[FBNeo] Falha:`, err);
+      json(res, 500, { error: `Falha ao iniciar FBNeo: ${err.message}` });
     }
     return;
   }
@@ -375,7 +386,7 @@ ${ports}
 
 const server = http.createServer(handleRequest);
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`\n✅ MAME Backend v3 rodando em http://localhost:${PORT}\n`);
+  console.log(`\n✅ Master Games Arcade Backend FBNeo rodando em http://localhost:${PORT}\n`);
 });
 server.on("error", (err) => {
   if (err.code === "EADDRINUSE") {
