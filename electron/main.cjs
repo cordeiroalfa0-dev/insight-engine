@@ -1,5 +1,5 @@
 // Master Games Arcade - Electron Main
-// Spawns: (1) mame-server.js (porta 7777), (2) Vite serving the React app,
+// Spawns: (1) local backend (porta 7777), (2) Vite/static app server,
 // then opens a BrowserWindow no app.
 
 const { app, BrowserWindow, shell, Menu } = require("electron");
@@ -25,8 +25,8 @@ const RESOURCE_ROOT = isDev ? path.join(APP_ROOT, "resources") : process.resourc
 const APP_PORT = 8080;
 const MAME_PORT = 7777;
 
-// Caminhos fixos dos emuladores embutidos no instalador.
-// Em produção: tenta <resources>/mame|mameplus e <resources>/app/resources/...
+// Caminho fixo do FinalBurn Neo embutido no instalador.
+// Em produção: tenta <resources>/fbneo e <resources>/app/resources/...
 // Em dev: <repo>/resources/...
 function uniqueExistingRoots(roots) {
   const seen = new Set();
@@ -67,7 +67,7 @@ const FBNEO_EXE = firstExistingPath([
   path.join(APP_ROOT, "resources", "fbneo", "fbneo64.exe"),
   ...fromRoots(["resources", "fbneo", "fbneo64.exe"]),
 ]);
-// Compat: aliases antigos apontam para FBNeo para nao quebrar chamadas do backend.
+// Compat: aliases antigos apontam para FBNeo para nao quebrar chamadas antigas do backend.
 const MAME_EXE = FBNEO_EXE;
 const MAMEPLUS_EXE = FBNEO_EXE;
 
@@ -111,18 +111,15 @@ function spawnMameServer() {
     return;
   }
   let runnableServerPath = serverPath;
-  // Se o arquivo estiver fora da pasta que contém package.json com type=module
-  // (ex.: extraResources), o Node trataria .js como CommonJS e quebraria no import.
-  // Copiamos como .mjs para garantir execução ESM em qualquer instalador.
-  if (!serverPath.includes("app.asar") && path.extname(serverPath).toLowerCase() === ".js") {
-    try {
-      const tempDir = path.join(app.getPath("userData"), "runtime");
-      fs.mkdirSync(tempDir, { recursive: true });
-      runnableServerPath = path.join(tempDir, "mame-server.mjs");
-      fs.copyFileSync(serverPath, runnableServerPath);
-    } catch (err) {
-      log("Falha ao preparar mame-server.mjs:", err.message);
-    }
+  // Sempre copia para fora do asar como .mjs. Isso evita falhas no Windows
+  // quando o backend está dentro de app.asar/extraResources e garante ESM.
+  try {
+    const tempDir = path.join(app.getPath("userData"), "runtime");
+    fs.mkdirSync(tempDir, { recursive: true });
+    runnableServerPath = path.join(tempDir, "mame-server.mjs");
+    fs.copyFileSync(serverPath, runnableServerPath);
+  } catch (err) {
+    log("Falha ao preparar mame-server.mjs:", err.message);
   }
   log("Iniciando mame-server.js...");
   // Windows: process.execPath tem espacos ("Program Files"). Sem shell:true o spawn

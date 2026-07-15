@@ -6,22 +6,13 @@ import { useSpring, animated as animatedRaw } from "@react-spring/web";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const animated: any = animatedRaw;
 
-import LazyLoadPkg from "react-lazy-load-image-component";
+import { LazyLoadImage } from "react-lazy-load-image-component";
 import "react-lazy-load-image-component/src/effects/opacity.css";
 import { Howl } from "howler";
 import localforage from "localforage";
 import { useDebounce } from "use-debounce";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { FolderBrowser } from "@/components/FolderBrowser";
-
-const { LazyLoadImage } = LazyLoadPkg as unknown as { LazyLoadImage: React.ComponentType<{
-  src: string;
-  alt: string;
-  effect?: string;
-  threshold?: number;
-  wrapperClassName?: string;
-  className?: string;
-}> };
 
 // ─── Howler sons arcade (import ES, sem CDN) ──────────────────────────────────
 let soundsReady = false;
@@ -194,8 +185,8 @@ export const Route = createFileRoute("/")({
   component: Home,
   head: () => ({
     meta: [
-      { title: "Master Games Arcade · MAME Launcher" },
-      { name: "description", content: "Retro arcade MAME launcher with neon CRT vibes." },
+      { title: "Master Games Arcade · FBNeo Launcher" },
+      { name: "description", content: "Retro arcade FinalBurn Neo launcher with neon CRT vibes." },
     ],
   }),
 });
@@ -215,8 +206,8 @@ function Home() {
   const [launchingRom, setLaunchingRom] = useState<string>("");
   const [backendStatus, setBackendStatus] = useState<"checking" | "ok" | "offline">("checking");
   const [configRomsPath, setConfigRomsPath] = useState("");
-  const [selectedEmulator, setSelectedEmulator] = useState<"mame" | "mameplus">("mame");
-  const [emuStatus, setEmuStatus] = useState<{ mame: boolean; mameplus: boolean }>({ mame: false, mameplus: false });
+  const [selectedEmulator, setSelectedEmulator] = useState<"fbneo">("fbneo");
+  const [emuStatus, setEmuStatus] = useState<{ fbneo: boolean }>({ fbneo: false });
   const [configMsg, setConfigMsg]       = useState("");
   const [launchMsg, setLaunchMsg]       = useState("");
   const [sidebarMode, setSidebarModeState] = useState<SidebarMode>("normal");
@@ -323,8 +314,7 @@ function Home() {
         const { romsDir } = JSON.parse(cfg);
         if (romsDir) { setRomsPath(romsDir); setConfigRomsPath(romsDir); }
       }
-      const emu = localStorage.getItem("mame.emulator");
-      if (emu === "mame" || emu === "mameplus") setSelectedEmulator(emu);
+      setSelectedEmulator("fbneo");
       setShowMameWindow(localStorage.getItem("mame.showWindow") === "1");
     } catch { /* noop */ }
     checkBackend().then(async (ok) => {
@@ -359,18 +349,18 @@ function Home() {
     return () => clearInterval(interval);
   }, [romsPath, backendStatus, scanRoms]);
 
-  // Detecta os dois emuladores embutidos (resolvidos no backend via env)
+  // Detecta o emulador embutido (resolvido no backend via env)
   useEffect(() => {
     if (backendStatus !== "ok") return;
     fetch(`${BACKEND}/api/emuladores`)
       .then((r) => r.json())
-      .then((d) => setEmuStatus({ mame: !!d?.mame?.exists, mameplus: !!d?.mameplus?.exists }))
+      .then((d) => setEmuStatus({ fbneo: !!d?.fbneo?.exists || !!d?.mame?.exists }))
       .catch(() => { /* noop */ });
   }, [backendStatus]);
 
-  const pickEmulator = useCallback((e: "mame" | "mameplus") => {
-    setSelectedEmulator(e);
-    try { localStorage.setItem("mame.emulator", e); } catch { /* noop */ }
+  const pickEmulator = useCallback(() => {
+    setSelectedEmulator("fbneo");
+    try { localStorage.setItem("mame.emulator", "fbneo"); } catch { /* noop */ }
   }, []);
 
   const filteredRoms = useMemo(() => getFilteredRoms(), [getFilteredRoms]);
@@ -386,13 +376,13 @@ function Home() {
   const handleLaunchGame = useCallback(async (romName: string) => {
     if (backendStatus !== "ok") {
       playSound(sndError);
-      setLaunchMsg("✗ Backend offline! Abra um terminal e rode: node mame-server.js");
+      setLaunchMsg("✗ Backend offline no instalador. Reinstale usando o EXE atualizado.");
       setTimeout(() => setLaunchMsg(""), 5000); return;
     }
-    const emuOk = selectedEmulator === "mameplus" ? emuStatus.mameplus : emuStatus.mame;
+    const emuOk = emuStatus.fbneo;
     if (!emuOk) {
       playSound(sndError);
-      setLaunchMsg(`✗ ${selectedEmulator === "mameplus" ? "MAMEPlus" : "MAME"} não encontrado nos recursos do app`);
+      setLaunchMsg("✗ FinalBurn Neo não encontrado nos recursos do app");
       setTimeout(() => setLaunchMsg(""), 4000); return;
     }
     playSound(sndLaunch);
@@ -471,9 +461,9 @@ function Home() {
 
   const handleScanRoms = async () => {
     if (!configRomsPath.trim()) { setConfigMsg("✗ Informe a pasta de ROMs"); return; }
-    setConfigMsg("⏳ Escaneando e salvando no mame.ini...");
+    setConfigMsg("⏳ Escaneando e salvando no FBNeo...");
     const alive = await checkBackend();
-    if (!alive) { setConfigMsg("✗ Backend offline! Rode: node mame-server.js"); return; }
+    if (!alive) { setConfigMsg("✗ Backend offline no instalador. Reinstale usando o EXE atualizado."); return; }
     try {
       const iniRes = await fetch(`${BACKEND}/api/set-rompath`, {
         method: "POST",
@@ -481,8 +471,8 @@ function Home() {
         body: JSON.stringify({ romsPath: configRomsPath.trim() }),
       });
       const iniData = await iniRes.json();
-      if (!iniData.ok) { setConfigMsg(`✗ Erro ao salvar mame.ini: ${iniData.error}`); return; }
-    } catch { setConfigMsg("✗ Falha ao salvar no mame.ini"); return; }
+      if (!iniData.ok) { setConfigMsg(`✗ Erro ao salvar FBNeo: ${iniData.error}`); return; }
+    } catch { setConfigMsg("✗ Falha ao salvar no FBNeo"); return; }
     setRomsPath(configRomsPath.trim());
     saveCfg(configRomsPath.trim());
     await scanRoms(configRomsPath.trim());
@@ -491,7 +481,7 @@ function Home() {
   const historyRoms     = history.slice(0, 5).map((h) => h.rom);
   const selectedRom     = filteredRoms[selectedIndex];
   const isFavorite      = selectedRom && favorites.includes(selectedRom);
-  const anyEmuOk        = emuStatus.mame || emuStatus.mameplus;
+  const anyEmuOk        = emuStatus.fbneo;
   const mameStatusLabel = backendStatus === "checking" ? "⏳ VERIFICANDO" : anyEmuOk ? "✓ OK" : "✗ NÃO ENCONTRADO";
   const mameStatusColor = anyEmuOk ? "text-neon-green" : backendStatus === "checking" ? "text-neon-yellow" : "text-red-400";
   const glass           = "bg-black/40 backdrop-blur-md border border-neon-cyan/20";
@@ -579,7 +569,7 @@ function Home() {
             <div>
               <div className="font-display text-[10px] text-neon-cyan">MASTER GAMES ARCADE</div>
               <div className="font-body text-xs text-foreground/40 -mt-0.5">
-                Iniciador MAME · <span className="text-neon-magenta/80">DEV EMERSON · 2026</span>
+                Iniciador FBNeo · <span className="text-neon-magenta/80">DEV EMERSON · 2026</span>
                 {showMameInfo && backendStatus === "ok"      && <span className="text-neon-green ml-2">● backend ok</span>}
                 {showMameInfo && backendStatus === "offline" && <span className="text-red-400 ml-2">● backend offline</span>}
               </div>
@@ -588,7 +578,7 @@ function Home() {
           <div className="flex gap-2 items-center">
             <SidebarControls size="md" />
             <button onClick={() => setShowHistory(!showHistory)} className="font-display text-[8px] border border-neon-green/35 text-neon-green px-2.5 py-1 rounded bg-neon-green/5 hover:bg-neon-green/15 transition">⏱ RECENTE</button>
-            <button onClick={() => setShowMameInfo(v => !v)} className={`font-display text-[8px] border px-2.5 py-1 rounded transition ${showMameInfo ? "border-neon-yellow/50 text-neon-yellow bg-neon-yellow/10" : "border-white/15 text-foreground/40 bg-white/[0.02] hover:text-neon-yellow"}`}>👁 MAME</button>
+            <button onClick={() => setShowMameInfo(v => !v)} className={`font-display text-[8px] border px-2.5 py-1 rounded transition ${showMameInfo ? "border-neon-yellow/50 text-neon-yellow bg-neon-yellow/10" : "border-white/15 text-foreground/40 bg-white/[0.02] hover:text-neon-yellow"}`}>👁 FBNEO</button>
             <button onClick={() => { setShowConfig(!showConfig); setConfigMsg(""); }} className="font-display text-[8px] border border-neon-magenta/35 text-neon-magenta px-2.5 py-1 rounded bg-neon-magenta/5 hover:bg-neon-magenta/15 transition">
               <Settings2 size={9} className="inline mr-1" />CONFIG
             </button>
@@ -602,13 +592,12 @@ function Home() {
           <div className="font-display text-[8px] text-neon-magenta mb-2">// MASTER GAMES ARCADE · DEV EMERSON 2026 · CONFIGURAÇÃO</div>
           {backendStatus === "offline" && (
             <div className="mb-3 px-3 py-2 bg-red-900/30 border border-red-500/30 rounded font-display text-[7px] text-red-300">
-              ⚠ Backend offline! Abra um terminal na pasta do projeto e execute:<br />
-              <span className="text-neon-yellow font-bold">node mame-server.js</span>
+              ⚠ Backend offline no instalador. Reinstale usando o EXE atualizado.
             </div>
           )}
           <div className="space-y-3 max-w-2xl">
             <div className="px-3 py-2 rounded border border-neon-cyan/20 bg-neon-cyan/[0.04] font-body text-[10px] text-foreground/65 leading-snug">
-              <span className="text-neon-cyan font-display text-[8px]">ℹ EMULADORES EMBUTIDOS:</span> MAME 0.288 e MAMEPlus 0.168 vêm dentro do app — não é preciso configurar caminhos no PC. Você só precisa apontar a <span className="text-neon-yellow">PASTA DE ROMs</span>.
+              <span className="text-neon-cyan font-display text-[8px]">ℹ EMULADOR EMBUTIDO:</span> FinalBurn Neo vem dentro do app — não é preciso configurar caminhos no PC. Você só precisa apontar a <span className="text-neon-yellow">PASTA DE ROMs</span>.
             </div>
             <div className="space-y-1">
               <label className="font-display text-[7px] text-neon-cyan block">PASTA DE ROMs</label>
@@ -620,36 +609,27 @@ function Home() {
             </div>
             {configMsg && <div className={`font-display text-[7px] ${configMsg.startsWith("✓") ? "text-neon-green" : configMsg.startsWith("⏳") ? "text-neon-yellow" : "text-red-400"}`}>{configMsg}</div>}
 
-            {/* EMULADOR (MAME 0.288 / MAMEPlus 0.168) */}
+            {/* EMULADOR (FinalBurn Neo) */}
             <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-2">
               <div className="font-display text-[7px] text-neon-magenta">// EMULADOR</div>
               <div className="flex gap-2 flex-wrap items-center">
                 <button
-                  onClick={() => pickEmulator("mame")}
-                  className={`font-display text-[8px] px-3 py-1.5 rounded border transition ${selectedEmulator === "mame" ? "border-neon-cyan text-neon-cyan bg-neon-cyan/15" : "border-white/15 text-foreground/55 hover:text-neon-cyan"}`}
+                  onClick={() => pickEmulator()}
+                  className="font-display text-[8px] px-3 py-1.5 rounded border transition border-neon-cyan text-neon-cyan bg-neon-cyan/15"
                 >
-                  MAME 0.288 {emuStatus.mame ? "●" : "○"}
-                </button>
-                <button
-                  onClick={() => pickEmulator("mameplus")}
-                  disabled={!emuStatus.mameplus}
-                  className={`font-display text-[8px] px-3 py-1.5 rounded border transition disabled:opacity-40 disabled:cursor-not-allowed ${selectedEmulator === "mameplus" ? "border-neon-magenta text-neon-magenta bg-neon-magenta/15" : "border-white/15 text-foreground/55 hover:text-neon-magenta"}`}
-                >
-                  MAMEPlus 0.168 {emuStatus.mameplus ? "●" : "○"}
+                  FinalBurn Neo {emuStatus.fbneo ? "●" : "○"}
                 </button>
                 <span className="font-body text-[10px] text-foreground/45">
-                  {selectedEmulator === "mame"
-                    ? "ROMs do conjunto 0.288 (recente)."
-                    : "ROMs do conjunto 0.168 — compatível com sets antigos (Mameplus 0.168 r5272 x64)."}
+                  CPS1/2/3, Neo Geo, Cave, Toaplan, Konami, Sega System 16, PGM e outros sistemas arcade.
                 </span>
               </div>
               <div className="font-body text-[10px] text-foreground/55 leading-snug">
-                ⚠ <span className="text-neon-yellow">Aviso de romset:</span> MAME 0.288 e MAMEPlus 0.168 usam <span className="text-neon-cyan">conjuntos de ROMs diferentes</span>. Mantenha pastas separadas e use o emulador correspondente ao set para ROMs limpas.
+                ⚠ <span className="text-neon-yellow">Aviso de romset:</span> o FBNeo usa romsets próprios. Use ROMs compatíveis com FinalBurn Neo para melhor resultado.
               </div>
             </div>
 
             <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-2">
-              <div className="font-display text-[7px] text-neon-magenta">// COMPORTAMENTO DO MAME</div>
+              <div className="font-display text-[7px] text-neon-magenta">// COMPORTAMENTO DO FBNEO</div>
 
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
@@ -661,7 +641,7 @@ function Home() {
                   }}
                   className="accent-neon-cyan"
                 />
-                <span className="font-display text-[7px] text-neon-cyan">MOSTRAR JANELA DO MAME (DEBUG)</span>
+                <span className="font-display text-[7px] text-neon-cyan">MOSTRAR JANELA DO FBNEO (DEBUG)</span>
                 <span className="font-body text-[10px] text-foreground/45">
                   {showMameWindow ? "Vai abrir em janela com console." : "Oculto: só o jogo em fullscreen aparece."}
                 </span>
@@ -694,14 +674,12 @@ function Home() {
             </div>
 
             <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-1.5">
-              <div className="font-display text-[7px] text-neon-magenta">// MAME OFICIAL (OPEN SOURCE)</div>
+              <div className="font-display text-[7px] text-neon-magenta">// FINALBURN NEO (OPEN SOURCE)</div>
               <div className="flex flex-wrap gap-2">
-                <a href="https://www.mamedev.org/release.html" target="_blank" rel="noopener noreferrer" className="font-display text-[7px] border border-neon-cyan/35 text-neon-cyan px-3 py-1.5 rounded bg-neon-cyan/5 hover:bg-neon-cyan/15 transition">⬇ BAIXAR MAME OFICIAL</a>
-                <a href="https://www.mamedev.org/roms/" target="_blank" rel="noopener noreferrer" className="font-display text-[7px] border border-neon-green/35 text-neon-green px-3 py-1.5 rounded bg-neon-green/5 hover:bg-neon-green/15 transition">⬇ ROMS LEGAIS (MAMEDEV)</a>
+                <a href="https://github.com/finalburnneo/FBNeo" target="_blank" rel="noopener noreferrer" className="font-display text-[7px] border border-neon-cyan/35 text-neon-cyan px-3 py-1.5 rounded bg-neon-cyan/5 hover:bg-neon-cyan/15 transition">⬇ PROJETO FBNEO</a>
               </div>
               <div className="font-body text-[10px] text-foreground/45 leading-snug">
-                ⚠ Se alguns <span className="text-neon-yellow">.zip</span> não abrem é porque o romset é de outra versão do MAME (ex.: 0.139 / 0.245).
-                Use o <span className="text-neon-cyan">MAME oficial</span> e ROMs do <span className="text-neon-cyan">mesmo set</span>, ou rode <span className="text-neon-yellow">mame -verifyroms nomedorom</span> para conferir.
+                ⚠ Se alguns <span className="text-neon-yellow">.zip</span> não abrem é porque o romset não é compatível com FinalBurn Neo.
               </div>
             </div>
           </div>
@@ -711,13 +689,13 @@ function Home() {
       {showMameInfo && backendStatus === "offline" && !showConfig && (
         <div className="fixed top-[46px] left-3 right-3 z-[38] rounded-b-md px-4 py-2 bg-red-900/25 border border-red-500/25 backdrop-blur-md flex items-center gap-2">
           <AlertTriangle size={11} className="text-red-400 flex-shrink-0" />
-          <span className="font-display text-[7px] text-red-300">Backend offline! Abra um terminal e rode: <span className="text-neon-yellow">node mame-server.js</span></span>
+          <span className="font-display text-[7px] text-red-300">Backend offline no instalador. Use o EXE atualizado.</span>
         </div>
       )}
       {showMameInfo && backendStatus === "ok" && !anyEmuOk && !showConfig && (
         <div className="fixed top-[46px] left-3 right-3 z-[38] rounded-b-md px-4 py-2 bg-yellow-900/25 border border-yellow-500/25 backdrop-blur-md flex items-center gap-2">
           <AlertTriangle size={11} className="text-yellow-400 flex-shrink-0" />
-          <span className="font-display text-[7px] text-yellow-300">Nenhum emulador detectado nos recursos do app.</span>
+          <span className="font-display text-[7px] text-yellow-300">FinalBurn Neo não foi detectado nos recursos do app.</span>
         </div>
       )}
 
@@ -818,19 +796,19 @@ function Home() {
           className={`fixed top-[46px] right-3 bottom-[22px] z-30 rounded-md flex flex-col overflow-hidden ${glassDark}`}>
           <div className="px-2 pt-2 pb-2 border-b border-white/[0.06] flex-shrink-0">
             <div className="flex items-center justify-between mb-1 gap-1">
-              <div className="font-display text-[7px] text-neon-cyan truncate">{sidebarMode === "compact" ? "// MAME" : "// Lançador MAME"}</div>
+              <div className="font-display text-[7px] text-neon-cyan truncate">{sidebarMode === "compact" ? "// FBNEO" : "// Lançador FBNeo"}</div>
               <SidebarControls />
             </div>
             {sidebarMode === "normal" && (
               <>
                 <h1 className="font-display text-[13px] leading-tight text-neon-magenta mb-1">SELECIONE<br />SEU JOGO</h1>
                 <p className="font-body text-[11px] text-foreground/35 mb-2">
-                  {anyEmuOk ? `✓ MAME · ${romsList.length} jogos · ${favorites.length} favoritos` : backendStatus === "checking" ? "⏳ Verificando MAME..." : "⚠ Nenhum emulador detectado"}
+                  {anyEmuOk ? `✓ FBNeo · ${romsList.length} jogos · ${favorites.length} favoritos` : backendStatus === "checking" ? "⏳ Verificando FBNeo..." : "⚠ Nenhum emulador detectado"}
                 </p>
                 {showMameInfo && (
                   <div className="bg-black/30 border border-white/[0.05] rounded px-2 py-1.5">
                     <div className="flex flex-wrap gap-x-2 gap-y-0.5 mb-1">
-                      <span className="font-display text-[6px]">MAME: <span className={mameStatusColor}>{mameStatusLabel}</span></span>
+                      <span className="font-display text-[6px]">FBNEO: <span className={mameStatusColor}>{mameStatusLabel}</span></span>
                       <span className="font-display text-[6px]">JOGOS: <span className="text-neon-yellow">{romsList.length}</span></span>
                       <span className="font-display text-[6px]">FAVORITOS: <span className="text-neon-yellow">{favorites.length}</span></span>
                     </div>
@@ -899,7 +877,7 @@ function Home() {
                 </>
               ) : romsList.length === 0 ? (
                 <div className="px-3 py-6 font-body text-[10px] text-foreground/25 text-center">
-                  {backendStatus === "offline" ? "Backend offline.\nRode: node mame-server.js" : "Configure a pasta de ROMs em ⚙ CONFIG"}
+                  {backendStatus === "offline" ? "Backend offline no instalador." : "Configure a pasta de ROMs em ⚙ CONFIG"}
                 </div>
               ) : filteredRoms.length > 0 ? (
                 filteredRoms.map((rom, idx) => {
@@ -956,8 +934,8 @@ function Home() {
 
       <footer className="fixed bottom-0 left-0 right-0 z-40">
         <div className={`px-4 py-1 flex items-center justify-between ${glass}`}>
-          <div className="font-display text-[7px] text-foreground/25">© 2026 MASTER GAMES ARCADE · MAME LAUNCHER ULTIMATE · <span className="text-neon-magenta/60">DEV EMERSON 2026</span></div>
-          {showMameInfo && <span className={`font-display text-[7px] ${anyEmuOk ? "text-neon-green animate-blink" : "text-red-400"}`}>{anyEmuOk ? "● ONLINE" : "● MAME OFFLINE"}</span>}
+          <div className="font-display text-[7px] text-foreground/25">© 2026 MASTER GAMES ARCADE · FBNEO LAUNCHER ULTIMATE · <span className="text-neon-magenta/60">DEV EMERSON 2026</span></div>
+          {showMameInfo && <span className={`font-display text-[7px] ${anyEmuOk ? "text-neon-green animate-blink" : "text-red-400"}`}>{anyEmuOk ? "● ONLINE" : "● FBNEO OFFLINE"}</span>}
         </div>
         <div className="marquee-bar h-[2px] w-full" />
       </footer>

@@ -49,52 +49,11 @@
         "to": "public"
       },
       {
-        "from": "resources/mame",
-        "to": "mame",
+        "from": "resources/fbneo",
+        "to": "fbneo",
         "filter": [
           "**/*",
-          "!roms/**",
-          "!samples/**",
-          "!docs/**",
-          "!*.txt",
-          "!*.md",
-          "!chdman*.exe",
-          "!imgtool*.exe",
-          "!jedutil*.exe",
-          "!castool*.exe",
-          "!ldverify*.exe",
-          "!ldresample*.exe",
-          "!floptool*.exe",
-          "!nltool*.exe",
-          "!nlwav*.exe",
-          "!romcmp*.exe",
-          "!unidasm*.exe",
-          "!pmdcomp*.exe",
-          "!srcclean*.exe",
-          "!split*.exe",
-          "!7z*.exe"
-        ]
-      },
-      {
-        "from": "resources/mameplus",
-        "to": "mameplus",
-        "filter": [
-          "**/*",
-          "!roms/**",
-          "!samples/**",
-          "!docs/**",
-          "!*.txt",
-          "!*.md",
-          "!chdman*.exe",
-          "!imgtool*.exe",
-          "!jedutil*.exe",
-          "!castool*.exe",
-          "!ldverify*.exe",
-          "!ldresample*.exe",
-          "!floptool*.exe",
-          "!romcmp*.exe",
-          "!unidasm*.exe",
-          "!7z*.exe"
+          "!roms/**"
         ]
       }
     ],
@@ -120,7 +79,8 @@
     "asarUnpack": [
       "mame-server.js",
       "intro.html",
-      "intro_bg.mp4"
+      "intro_bg.mp4",
+      "resources/fbneo/**/*"
     ]
   },
   "dependencies": {
@@ -192,7 +152,7 @@
   "devDependencies": {
     "@electron/packager": "^20.0.1",
     "@eslint/js": "^9.32.0",
-    "@lovable.dev/vite-tanstack-config": "2.7.0",
+    "@lovable.dev/vite-tanstack-config": "2.7.4",
     "@types/howler": "^2.2.12",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
