@@ -295,8 +295,10 @@ async function createWindow() {
 
   // Splash: carrega intro.html local imediatamente
   const introPath = firstExistingFile([
-    ...fromRoots(["intro.html"]),
     ...fromRoots(["public", "intro.html"]),
+    ...fromRoots(["dist", "intro.html"]),
+    ...fromRoots(["dist", "client", "intro.html"]),
+    ...fromRoots(["intro.html"]),
   ]);
   if (fs.existsSync(introPath)) {
     await mainWindow.loadFile(introPath);
